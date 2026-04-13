@@ -10,18 +10,16 @@ def client():
 
 @pytest.fixture(autouse=True)
 def mock_ai_service():
-    """
-    Automatically mocks all API calls during tests.
-    'autouse=True' means you don't even have to add it to your test arguments.
-    """
     with requests_mock.Mocker() as m:
-        # This intercepts the POST request your client is making
-        m.post("https://api.example.com/chat", 
-               json={"status": "success", "response": "This is a mocked AI response"}, 
-               status_code=200)
-        
-        # This intercepts the GET request for your health check
-        m.get("https://api.example.com/chat", 
-              status_code=200)
-        
+        def dynamic_response(request, context):
+            # If the JSON body has an empty prompt, return 400
+            if request.json().get("prompt") == "":
+                context.status_code = 400
+                return {"error": "Empty prompt"}
+            # Otherwise return 200
+            context.status_code = 200
+            return {"status": "success", "response": "Mock Response"}
+
+        m.post("https://api.example.com/chat", json=dynamic_response)
+        m.get("https://api.example.com/chat", status_code=200)
         yield m
