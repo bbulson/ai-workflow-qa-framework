@@ -22,6 +22,9 @@ jobs:
         run: ls -R tests
 
       - name: Run tests
+        env:
+          # This tells Python: "The root of my repo is an official source for code"
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest tests
 
       - name: Upload Test Report
