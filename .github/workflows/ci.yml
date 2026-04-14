@@ -29,14 +29,13 @@ jobs:
       - name: Run JMeter Performance Test
         run: |
           sudo apt-get update && sudo apt-get install -y jmeter
-          # The -D flag below is the key to fixing the ForbiddenClassException
+          # Using JVM_ARGS to force the security override before JMeter even starts
+          export JVM_ARGS="-Dcom.thoughtworks.xstream.security.wildcard=true"
+          
           jmeter -n -t jmeter_test_plan.jmx -l results.jtl \
-          -Dproxy.proxyHost= -Dproxy.proxyPort= \
           -Jjmeter.save.saveservice.output_format=csv \
-          -Djmeter.save.saveservice.response_data=false \
-          -Dcom.thoughtworks.xstream.security.wildcard=true \
           -X
-
+          
           echo "--- JMeter Test Results ---"
           if [ -f results.jtl ]; then cat results.jtl; else echo "Results file not found"; fi
       - name: Upload Test Report
