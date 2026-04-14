@@ -27,17 +27,24 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests
       - name: Run JMeter Performance Test
+        timeout-minutes: 2
         run: |
           sudo apt-get update && sudo apt-get install -y jmeter
-          # Using JVM_ARGS to force the security override before JMeter even starts
-          export JVM_ARGS="-Dcom.thoughtworks.xstream.security.wildcard=true"
           
+          # This command explicitly whitelists the exact class that is failing
           jmeter -n -t jmeter_test_plan.jmx -l results.jtl \
           -Jjmeter.save.saveservice.output_format=csv \
+          -Dcom.thoughtworks.xstream.security.wildcard=true \
+          -Dcom.thoughtworks.xstream.security.whitelist=org.apache.jmeter.save.ScriptWrapper \
           -X
           
           echo "--- JMeter Test Results ---"
-          if [ -f results.jtl ]; then cat results.jtl; else echo "Results file not found"; fi
+          if [ -f results.jtl ]; then 
+            cat results.jtl
+          else 
+            echo "Results file not found - JMeter failed to start."
+            exit 1
+          fi
       - name: Upload Test Report
         uses: actions/upload-artifact@v4
         if: always() 
