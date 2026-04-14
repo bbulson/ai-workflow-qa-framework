@@ -27,22 +27,23 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests
       - name: Run JMeter Performance Test
-        timeout-minutes: 2
+        timeout-minutes: 5
         run: |
-          sudo apt-get update && sudo apt-get install -y jmeter
+          # 1. Download modern JMeter
+          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          tar -xzf apache-jmeter-5.6.3.tgz
           
-          # This command explicitly whitelists the exact class that is failing
-          jmeter -n -t jmeter_test_plan.jmx -l results.jtl \
+          # 2. Run using the modern binary
+          ./apache-jmeter-5.6.3/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl \
           -Jjmeter.save.saveservice.output_format=csv \
-          -Dcom.thoughtworks.xstream.security.wildcard=true \
-          -Dcom.thoughtworks.xstream.security.whitelist=org.apache.jmeter.save.ScriptWrapper \
           -X
           
+          # 3. Print Results
           echo "--- JMeter Test Results ---"
           if [ -f results.jtl ]; then 
             cat results.jtl
           else 
-            echo "Results file not found - JMeter failed to start."
+            echo "Results file not found. Check JMeter logs."
             exit 1
           fi
       - name: Upload Test Report
