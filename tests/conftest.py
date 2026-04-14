@@ -15,9 +15,9 @@ def mock_ai_service():
             data = request.json()
             prompt = data.get("prompt", "")
 
-            if prompt == "":
+            if prompt == "" or prompt is None:
                 context.status_code = 400
-                return {"error": "Bad Request", "message": "Prompt cannot be empty"}
+                return {"error": "Bad Request", "message": "Prompt cannot be empty or null"}
             
             # Default successful response
             context.status_code = 200
