@@ -19,36 +19,52 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: List files for debugging
-        run: ls -R tests
+        run: ls -R
 
       - name: Run tests
         env:
-          # This tells Python: "The root of my repo is an official source for code"
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest tests
+        # Note: Ensure pytest is configured to generate the html report in the 'reports/' folder
+        run: pytest tests --html=reports/report.html --self-contained-html
+
       - name: Run JMeter Performance Test
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           # 1. Download modern JMeter
+          echo "Downloading JMeter..."
           wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          
+          # 2. Extract the archive
+          echo "Extracting JMeter..."
           tar -xzf apache-jmeter-5.6.3.tgz
           
-          # 2. Run using the modern binary
-          ./apache-jmeter-5.6.3/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl \
-          -Jjmeter.save.saveservice.output_format=csv \
-          -X
+          # 3. Run the test
+          # -n: non-GUI mode
+          # -t: your test plan (Ensure jmeter_test_plan.jmx is in your root folder)
+          # -l: where to save raw results
+          # -e -o: generate the HTML dashboard folder
+          echo "Running JMeter Test..."
+          ./apache-jmeter-5.6.3/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl -e -o jmeter_dashboard/
           
-          # 3. Print Results
-          echo "--- JMeter Test Results ---"
+          # 4. Print Results to console for quick debugging
+          echo "--- JMeter Raw CSV Results ---"
           if [ -f results.jtl ]; then 
             cat results.jtl
           else 
-            echo "Results file not found. Check JMeter logs."
+            echo "Results file (results.jtl) not found. Check JMeter logs."
             exit 1
           fi
-      - name: Upload Test Report
+
+      - name: Upload Pytest Report
         uses: actions/upload-artifact@v4
         if: always() 
         with:
-          name: pytest-report
+          name: pytest-functional-report
           path: reports/report.html
+
+      - name: Upload JMeter Dashboard
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jmeter-performance-report
+          path: jmeter_dashboard/
