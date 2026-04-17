@@ -24,7 +24,7 @@ jobs:
           # Create self-signed certs for Nginx
           openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -sha256 -days 365 -nodes -subj "/CN=localhost"
           # Start Nginx & Flask
-          docker-compose up -d --build
+          docker compose up -d --build
           sleep 15
 
       - name: Run Functional Tests (Pytest)
