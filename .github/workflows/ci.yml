@@ -35,7 +35,7 @@ jobs:
           python ai-workflow-qa-framework/mock_server/chatbot_mock.py & 
           
           # 2. Wait 10 seconds to give Flask time to boot up
-          sleep 10
+          sleep 20
           
           # 3. Download modern JMeter
           echo "Downloading JMeter..."
