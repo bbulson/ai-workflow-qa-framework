@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     prompt = data.get("prompt", "")
     return jsonify({"response": f"Mock reply to: {prompt}"})
 
