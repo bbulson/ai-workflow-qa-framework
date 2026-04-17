@@ -27,6 +27,10 @@ jobs:
         # Note: Ensure pytest is configured to generate the html report in the 'reports/' folder
         run: pytest tests --html=reports/report.html --self-contained-html
 
+      - name: Install dependencies
+        run: |
+          pip install flask pyOpenSSL
+          
       - name: Start Flask and Run JMeter Performance Test
         timeout-minutes: 10
         run: |
@@ -51,7 +55,10 @@ jobs:
           # -l: where to save raw results
           # -e -o: generate the HTML dashboard folder
           echo "Running JMeter Test..."
-          ./apache-jmeter-5.6.3/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl -e -o jmeter_dashboard/
+          ./apache-jmeter-5.6.3/bin/jmeter \
+            -Jhttps.truststore.allow_anonymous=true \
+            -n -t jmeter_test_plan.jmx \
+            -l results.jtl -e -o jmeter_dashboard/
           
           # 6. Print Results to console for quick debugging
           echo "--- JMeter Raw CSV Results ---"
