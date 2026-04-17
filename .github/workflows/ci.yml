@@ -27,9 +27,12 @@ jobs:
           openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -sha256 -days 365 -nodes -subj "/CN=localhost"
           docker compose up -d --build
           sleep 30
-
+          
       - name: Test Nginx endpoint
-        run: curl -vk https://localhost:5000/chat
+        run: |
+          curl -k https://localhost:5000/chat \
+          -H "Content-Type: application/json" \
+          -d '{"prompt":"hello"}'
 
       - name: Run Functional Tests
         env:
