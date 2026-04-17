@@ -26,4 +26,4 @@ def chat():
 
 if __name__ == "__main__":
     # Ensure this stays 0.0.0.0 for GitHub Actions
-    app.run(host='0.0.0.0', port=5000, ssl_context='adhoc')
+    app.run(host='0.0.0.0', port=5000)
