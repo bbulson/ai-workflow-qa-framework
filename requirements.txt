@@ -3,3 +3,5 @@ requests
 pytest-html
 flask
 requests-mock
+gunicorn
+pyOpenSSL
