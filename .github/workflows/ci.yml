@@ -27,18 +27,25 @@ jobs:
         # Note: Ensure pytest is configured to generate the html report in the 'reports/' folder
         run: pytest tests --html=reports/report.html --self-contained-html
 
-      - name: Run JMeter Performance Test
+      - name: Start Flask and Run JMeter Performance Test
         timeout-minutes: 10
         run: |
-          # 1. Download modern JMeter
+          # 1. Start your Flask app in the background
+          # We use '&' so the terminal stays open for the next commands
+          python app.py & 
+          
+          # 2. Wait 10 seconds to give Flask time to boot up
+          sleep 10
+          
+          # 3. Download modern JMeter
           echo "Downloading JMeter..."
           wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
           
-          # 2. Extract the archive
+          # 4. Extract the archive
           echo "Extracting JMeter..."
           tar -xzf apache-jmeter-5.6.3.tgz
           
-          # 3. Run the test
+          # 5. Run the test
           # -n: non-GUI mode
           # -t: your test plan (Ensure jmeter_test_plan.jmx is in your root folder)
           # -l: where to save raw results
@@ -46,7 +53,7 @@ jobs:
           echo "Running JMeter Test..."
           ./apache-jmeter-5.6.3/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl -e -o jmeter_dashboard/
           
-          # 4. Print Results to console for quick debugging
+          # 6. Print Results to console for quick debugging
           echo "--- JMeter Raw CSV Results ---"
           if [ -f results.jtl ]; then 
             cat results.jtl
