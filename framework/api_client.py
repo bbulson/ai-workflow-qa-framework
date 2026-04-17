@@ -6,19 +6,19 @@ class AIClient:
         # Uses the URL passed from the test, or falls back to the config default
         self.url = base_url or BASE_URL
 
-    def send_prompt(self, prompt):
-        payload = {"prompt": prompt}
-        response = requests.post(
-            self.url,
-            json=payload,
-            timeout=5
-        )
-        return response
+def send_prompt(self, prompt):
+    response = requests.post(
+        f"{self.url}/chat",
+        json={"prompt": prompt},
+        timeout=5
+    )
+    response.raise_for_status()
+    return response.json()
 
-    def check_health(self):
-        """Returns True if the endpoint is reachable (status 200)."""
-        try:
-            response = requests.get(self.url, timeout=5)
-            return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False
+def check_health(self):
+    response = requests.get(
+        f"{self.url}/health",
+        timeout=5
+    )
+    response.raise_for_status()
+    return response.json()
