@@ -13,72 +13,39 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install Pytest dependencies
         run: pip install -r requirements.txt
 
-      - name: List files for debugging
-        run: ls -R
+      - name: Launch Environment (Docker + SSL)
+        run: |
+          mkdir -p certs
+          # Create self-signed certs for Nginx
+          openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -sha256 -days 365 -nodes -subj "/CN=localhost"
+          # Start Nginx & Flask
+          docker-compose up -d --build
+          sleep 15
 
-      - name: Run tests
+      - name: Run Functional Tests (Pytest)
         env:
           PYTHONPATH: ${{ github.workspace }}
-        # Note: Ensure pytest is configured to generate the html report in the 'reports/' folder
         run: pytest tests --html=reports/report.html --self-contained-html
 
-      - name: Install dependencies
+      - name: Run Performance Tests (JMeter)
         run: |
-          pip install flask pyOpenSSL
-          
-      - name: Start Flask and Run JMeter Performance Test
-        timeout-minutes: 10
-        run: |
-          # 1. Start your Flask app in the background
-          # We use '&' so the terminal stays open for the next commands
-          python mock_server/chatbot_mock.py & 
-          
-          # 2. Wait 10 seconds to give Flask time to boot up
-          sleep 10
-          
-          # 3. Download modern JMeter
-          echo "Downloading JMeter..."
-          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
-          
-          # 4. Extract the archive
-          echo "Extracting JMeter..."
+          wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
           tar -xzf apache-jmeter-5.6.3.tgz
-          
-          # 5. Run the test
-          # -n: non-GUI mode
-          # -t: your test plan (Ensure jmeter_test_plan.jmx is in your root folder)
-          # -l: where to save raw results
-          # -e -o: generate the HTML dashboard folder
-          echo "Running JMeter Test..."
           ./apache-jmeter-5.6.3/bin/jmeter \
             -Jhttps.truststore.allow_anonymous=true \
             -n -t jmeter_test_plan.jmx \
             -l results.jtl -e -o jmeter_dashboard/
-          
-          # 6. Print Results to console for quick debugging
-          echo "--- JMeter Raw CSV Results ---"
-          if [ -f results.jtl ]; then 
-            cat results.jtl
-          else 
-            echo "Results file (results.jtl) not found. Check JMeter logs."
-            exit 1
-          fi
 
-      - name: Upload Pytest Report
-        uses: actions/upload-artifact@v4
-        if: always() 
-        with:
-          name: pytest-functional-report
-          path: reports/report.html
-
-      - name: Upload JMeter Dashboard
-        uses: actions/upload-artifact@v4
+      - name: Upload Test Reports
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: jmeter-performance-report
-          path: jmeter_dashboard/
+          name: full-qa-reports
+          path: |
+            reports/report.html
+            jmeter_dashboard/
