@@ -1,5 +1,6 @@
+version: "3.9"
+
 services:
-  # The Python Flask Application
   flask-app:
     build:
       context: .
@@ -10,11 +11,10 @@ services:
       - PYTHONPATH=/app
     restart: always
 
-  # The Nginx Reverse Proxy (SSL Provider)
   nginx:
     image: nginx:latest
     ports:
-      - "5000:443" # JMeter hits https://localhost:5000 -> Nginx handles it as 443
+      - "5000:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certs:/etc/nginx/certs:ro
