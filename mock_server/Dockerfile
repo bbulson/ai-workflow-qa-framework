@@ -2,12 +2,19 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Reach out to the root folder to get the requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Prevent Python from writing pyc files and enable real-time logs
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Reach into the mock_server folder for the script
-COPY mock_server/chatbot_mock.py .
+# Install dependencies
+COPY requirements.txt /app/
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
+# Copy mock server code
+COPY mock_server/chatbot_mock.py /app/
+
+# Expose Flask port
+EXPOSE 5000
 
 # Run the app
 CMD ["python", "chatbot_mock.py"]
