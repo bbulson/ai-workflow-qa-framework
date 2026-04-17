@@ -28,7 +28,7 @@
         <hashTree/>
         
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Post Prompt Request" enabled="true">
-          <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+          <stringProp name="HTTPSampler.domain">localhost</stringProp>
           <stringProp name="HTTPSampler.port">5000</stringProp>
           <stringProp name="HTTPSampler.protocol">https</stringProp>
           <stringProp name="HTTPSampler.path">/chat</stringProp>
