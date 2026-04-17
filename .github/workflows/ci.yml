@@ -15,38 +15,32 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Pytest dependencies
+      - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Create report folder
+        run: mkdir -p reports
 
       - name: Launch Environment (Docker + SSL)
         run: |
           mkdir -p certs
-          # Create self-signed certs for Nginx
           openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -sha256 -days 365 -nodes -subj "/CN=localhost"
-          # Start Nginx & Flask
           docker compose up -d --build
-          sleep 15
+          sleep 30
 
-      - name: Run Functional Tests (Pytest)
+      - name: Run Functional Tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests --html=reports/report.html --self-contained-html
 
-      - name: Run Performance Tests (JMeter)
+      - name: Run Performance Tests
         run: |
-          # 1. Download and Extract JMeter
           wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
           tar -xzf apache-jmeter-5.6.3.tgz
-          
-          # 2. Run Test with Hardened SSL Trust & Network Retries
+
           ./apache-jmeter-5.6.3/bin/jmeter \
             -n -t jmeter_test_plan.jmx \
-            -l results.jtl -e -o jmeter_dashboard/ \
-            -Jhttps.truststore.allow_anonymous=true \
-            -Djavax.net.ssl.trustAll=true \
-            -Dhttps.protocols=TLSv1.2 \
-            -Dsun.security.ssl.allowUnsafeRenegotiation=true \
-            -Jhttpclient4.retry_count=3
+            -l results.jtl -e -o jmeter_dashboard/
 
       - name: Upload Test Reports
         if: always()
