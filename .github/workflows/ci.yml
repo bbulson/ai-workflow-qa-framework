@@ -33,14 +33,20 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests --html=reports/report.html --self-contained-html
 
-      - name: Run Performance Tests
+      - name: Install JMeter
         run: |
           wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
           tar -xzf apache-jmeter-5.6.3.tgz
 
+      - name: Run Performance Tests
+        run: |
+          rm -rf jmeter_dashboard
           ./apache-jmeter-5.6.3/bin/jmeter \
-            -n -t jmeter_test_plan.jmx \
-            -l results.jtl -e -o jmeter_dashboard/
+            -n \
+            -t jmeter_test_plan.jmx \
+            -l results.jtl \
+            -e \
+            -o jmeter_dashboard
 
       - name: Upload Test Reports
         if: always()
@@ -50,3 +56,4 @@ jobs:
           path: |
             reports/report.html
             jmeter_dashboard/
+            results.jtl
