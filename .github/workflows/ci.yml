@@ -32,10 +32,10 @@ jobs:
         run: |
           # 1. Start your Flask app in the background
           # We use '&' so the terminal stays open for the next commands
-          python ai-workflow-qa-framework/mock_server/chatbot_mock.py & 
+          python mock_server/chatbot_mock.py & 
           
           # 2. Wait 10 seconds to give Flask time to boot up
-          sleep 20
+          sleep 10
           
           # 3. Download modern JMeter
           echo "Downloading JMeter..."
