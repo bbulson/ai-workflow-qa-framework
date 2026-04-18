@@ -53,7 +53,7 @@ jobs:
             -l reports/results.jtl \
             -e \
             -o reports/jmeter_dashboard \
-            -Djsse.enableSNIExtension=false
+            -Djsse.enableSNIExtension=false \
             -Jjmeter.save.saveservice.samplerData=true \
             -Jjmeter.save.saveservice.responseData=true \
             -Jjmeter.save.saveservice.requestHeaders=true \
