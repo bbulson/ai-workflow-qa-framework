@@ -46,13 +46,13 @@ jobs:
 
       - name: Run Performance Tests
         run: |
-          rm -rf jmeter_dashboard
+          rm -rf reports/jmeter_dashboard
           ./apache-jmeter-5.6.3/bin/jmeter \
             -n \
             -t jmeter_test_plan.jmx \
-            -l results.jtl \
+            -l reports/results.jtl \
             -e \
-            -o jmeter_dashboard \
+            -o reports/jmeter_dashboard \
             -Djsse.enableSNIExtension=false
 
       - name: Upload Test Reports
@@ -62,5 +62,5 @@ jobs:
           name: full-qa-reports
           path: |
             reports/report.html
-            jmeter_dashboard/
-            results.jtl
+            reports/jmeter_dashboard/
+            reports/results.jtl
