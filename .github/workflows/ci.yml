@@ -54,6 +54,10 @@ jobs:
             -e \
             -o reports/jmeter_dashboard \
             -Djsse.enableSNIExtension=false
+            -Jjmeter.save.saveservice.samplerData=true \
+            -Jjmeter.save.saveservice.responseData=true \
+            -Jjmeter.save.saveservice.requestHeaders=true \
+            -Jjmeter.save.saveservice.responseHeaders=true
 
       - name: Upload Test Reports
         if: always()
@@ -64,3 +68,4 @@ jobs:
             reports/report.html
             reports/jmeter_dashboard/
             reports/results.jtl
+            reports/request_response_trace.jtl
