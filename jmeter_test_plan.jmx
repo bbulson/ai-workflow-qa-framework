@@ -64,7 +64,7 @@ Performance test simulating concurrent AI chatbot users
 
 <!-- API REQUEST -->
 
-<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt - ${prompt}" enabled="true">
 
 <stringProp name="HTTPSampler.domain">localhost</stringProp>
 <stringProp name="HTTPSampler.port">5000</stringProp>
