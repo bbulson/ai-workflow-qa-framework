@@ -69,3 +69,13 @@ jobs:
           ./apache-jmeter-5.6.3/bin/jmeter \
             -g reports/results.jtl \
             -o reports/jmeter_dashboard
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-qa-reports
+          path: |
+            reports/report.html
+            reports/jmeter_dashboard/
+            reports/results.jtl
+            reports/request_response_trace.jtl
