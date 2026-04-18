@@ -64,8 +64,8 @@ Performance test simulating concurrent AI chatbot users
 
 <!-- API REQUEST -->
 
-<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt - ${prompt}" enabled="true">
-
+#<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt - ${prompt}" enabled="true">
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
 <stringProp name="HTTPSampler.domain">localhost</stringProp>
 <stringProp name="HTTPSampler.port">5000</stringProp>
 <stringProp name="HTTPSampler.protocol">https</stringProp>
@@ -107,7 +107,10 @@ Performance test simulating concurrent AI chatbot users
 </hashTree>
 
 <!-- RESULTS -->
-
+<ResultCollector guiclass="SimpleDataWriter" testclass="ResultCollector" testname="Request Response Trace" enabled="true">
+<stringProp name="filename">request_response_trace.jtl</stringProp>
+</ResultCollector>
+<hashTree/>
 <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="Summary Report" enabled="true"/>
 <hashTree/>
 
