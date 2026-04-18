@@ -47,26 +47,25 @@ jobs:
       - name: Run Performance Tests
         run: |
           rm -rf reports/jmeter_dashboard
+      
           ./apache-jmeter-5.6.3/bin/jmeter \
             -n \
             -t jmeter_test_plan.jmx \
             -l reports/results.jtl \
-            -e \
-            -o reports/jmeter_dashboard \
-            -Djsse.enableSNIExtension=false \
+            -j reports/jmeter.log \
+            -Djsse.enableSNIExtension=false
+      
+          ./apache-jmeter-5.6.3/bin/jmeter \
+            -n \
+            -t jmeter_test_plan.jmx \
+            -l reports/request_response_trace.jtl \
             -Jjmeter.save.saveservice.output_format=xml \
             -Jjmeter.save.saveservice.samplerData=true \
             -Jjmeter.save.saveservice.responseData=true \
             -Jjmeter.save.saveservice.requestHeaders=true \
-            -Jjmeter.save.saveservice.responseHeaders=true
-
-      - name: Upload Test Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: full-qa-reports
-          path: |
-            reports/report.html
-            reports/jmeter_dashboard/
-            reports/results.jtl
-            reports/request_response_trace.jtl
+            -Jjmeter.save.saveservice.responseHeaders=true \
+            -Djsse.enableSNIExtension=false
+      
+          ./apache-jmeter-5.6.3/bin/jmeter \
+            -g reports/results.jtl \
+            -o reports/jmeter_dashboard
