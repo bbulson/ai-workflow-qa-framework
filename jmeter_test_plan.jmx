@@ -2,6 +2,7 @@
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
 <hashTree>
 
+<!-- TEST PLAN -->
 <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="AI Chat API Load Test" enabled="true">
 <stringProp name="TestPlan.comments">
 Performance test simulating concurrent AI chatbot users
@@ -10,6 +11,20 @@ Performance test simulating concurrent AI chatbot users
 
 <hashTree>
 
+<!-- include CSV variable in results -->
+<Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="Sample Variables" enabled="true">
+  <collectionProp name="Arguments.arguments">
+    <elementProp name="sample_variables" elementType="Argument">
+      <stringProp name="Argument.name">sample_variables</stringProp>
+      <stringProp name="Argument.value">prompt</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+    </elementProp>
+  </collectionProp>
+</Arguments>
+
+<hashTree/>
+
+<!-- THREAD GROUP -->
 <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent AI Users" enabled="true">
 <intProp name="ThreadGroup.num_threads">5</intProp>
 <intProp name="ThreadGroup.ramp_time">5</intProp>
@@ -27,7 +42,6 @@ Performance test simulating concurrent AI chatbot users
 <hashTree>
 
 <!-- CSV DATA SOURCE -->
-
 <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Prompt Dataset" enabled="true">
 <stringProp name="filename">test_data/prompts.csv</stringProp>
 <stringProp name="variableNames">prompt</stringProp>
@@ -40,7 +54,6 @@ Performance test simulating concurrent AI chatbot users
 <hashTree/>
 
 <!-- HTTP HEADERS -->
-
 <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
 <collectionProp name="HeaderManager.headers">
 
@@ -55,7 +68,6 @@ Performance test simulating concurrent AI chatbot users
 <hashTree/>
 
 <!-- USER THINK TIME -->
-
 <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="User Think Time" enabled="true">
 <stringProp name="ConstantTimer.delay">300</stringProp>
 </ConstantTimer>
@@ -63,11 +75,8 @@ Performance test simulating concurrent AI chatbot users
 <hashTree/>
 
 <!-- API REQUEST -->
-
-<!-- Include prompt data in labels
-<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt - ${prompt}" enabled="true">
--->
 <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
+
 <stringProp name="HTTPSampler.domain">localhost</stringProp>
 <stringProp name="HTTPSampler.port">5000</stringProp>
 <stringProp name="HTTPSampler.protocol">https</stringProp>
@@ -95,7 +104,6 @@ Performance test simulating concurrent AI chatbot users
 <hashTree>
 
 <!-- RESPONSE ASSERTION -->
-
 <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Validate JSON Response" enabled="true">
 <collectionProp name="Asserion.test_strings">
 <stringProp name="response_check">response</stringProp>
@@ -109,7 +117,6 @@ Performance test simulating concurrent AI chatbot users
 </hashTree>
 
 <!-- RESULTS -->
-
 <ResultCollector guiclass="SimpleDataWriter"
                  testclass="ResultCollector"
                  testname="Request Response Trace"
@@ -137,4 +144,9 @@ Performance test simulating concurrent AI chatbot users
 </ResultCollector>
 
 <hashTree/>
+
+</hashTree>
+</hashTree>
+</hashTree>
+
 </jmeterTestPlan>
