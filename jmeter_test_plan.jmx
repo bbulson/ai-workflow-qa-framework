@@ -109,19 +109,35 @@ Performance test simulating concurrent AI chatbot users
 </hashTree>
 
 <!-- RESULTS -->
-<ResultCollector guiclass="SimpleDataWriter" testclass="ResultCollector" testname="Request Response Trace" enabled="true">
+
+<ResultCollector guiclass="SimpleDataWriter"
+                 testclass="ResultCollector"
+                 testname="Request Response Trace"
+                 enabled="true">
+
 <stringProp name="filename">request_response_trace.jtl</stringProp>
+
+<objProp>
+  <name>saveConfig</name>
+  <value class="SampleSaveConfiguration">
+
+    <time>true</time>
+    <latency>true</latency>
+    <timestamp>true</timestamp>
+    <success>true</success>
+    <label>true</label>
+    <code>true</code>
+    <message>true</message>
+    <threadName>true</threadName>
+    <dataType>true</dataType>
+
+    <!-- THIS enables CSV variable logging -->
+    <variableNames>prompt</variableNames>
+
+  </value>
+</objProp>
+
 </ResultCollector>
+
 <hashTree/>
-<ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="Summary Report" enabled="true"/>
-<hashTree/>
-
-<ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="View Results Tree" enabled="true"/>
-<hashTree/>
-
-</hashTree>
-
-</hashTree>
-
-</hashTree>
 </jmeterTestPlan>
