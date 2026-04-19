@@ -60,7 +60,8 @@ jobs:
             -l reports/results.jtl \
             -e \
             -o reports/jmeter_dashboard \
-            -Djsse.enableSNIExtension=false
+            -Djsse.enableSNIExtension=false \
+            -Jsample_variables=prompt
 
       - name: Debug reports
         run: ls -R reports
