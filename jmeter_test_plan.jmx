@@ -131,9 +131,6 @@ Performance test simulating concurrent AI chatbot users
     <threadName>true</threadName>
     <dataType>true</dataType>
 
-    <!-- THIS enables CSV variable logging -->
-    <variableNames>prompt</variableNames>
-
   </value>
 </objProp>
 
