@@ -1,6 +1,6 @@
 from framework.api_client import AIClient
 
-client = AIClient("http://localhost:5000/chat")
+client = AIClient("https://api.example.com/chat")
 
 def test_api_available():
 
