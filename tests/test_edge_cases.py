@@ -1,6 +1,6 @@
 from framework.api_client import AIClient
 
-client = AIClient("https://api.example.com/chat")
+client = AIClient("http://localhost:5000")
 
 def test_empty_prompt():
 
