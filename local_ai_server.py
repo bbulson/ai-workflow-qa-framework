@@ -2,23 +2,31 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# limit request size (1 MB)
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
+MAX_PROMPT_LENGTH = 50000
+
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
 
-    if not data or "prompt" not in data:
-        return jsonify({"error": "Bad Request"}), 400
+    data = request.json
+    prompt = data.get("prompt")
 
-    prompt = data["prompt"]
-
-    if not prompt:
+    if prompt is None or prompt == "":
         return jsonify({"error": "Prompt cannot be empty"}), 400
 
-    return jsonify({"response": "Mock AI response"}), 200
+    if len(prompt) > MAX_PROMPT_LENGTH:
+        return jsonify({"error": "Payload too large"}), 413
+
+    return jsonify({
+        "status": "success",
+        "response": f"AI response to: {prompt}"
+    }), 200
+
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)
