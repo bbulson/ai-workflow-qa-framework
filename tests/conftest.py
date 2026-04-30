@@ -5,7 +5,7 @@ from framework.api_client import AIClient
 
 @pytest.fixture
 def client():
-    return AIClient("https://localhost:5000")
+    return AIClient("https://localhost:5050")
 
 
 @pytest.fixture(autouse=True)
