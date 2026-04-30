@@ -9,7 +9,7 @@ def test_empty_prompt(client):
 
 def test_very_long_prompt(client):
     """Verify system handles large inputs (e.g., 5000+ characters)."""
-    long_prompt = "AI " * 2000 
+    long_prompt = "AI " * 20000 
     response = client.send_prompt(long_prompt)
     # Depending on your mock, this might be 200 or a 413 (Payload Too Large)
     assert response.status_code == 200 
