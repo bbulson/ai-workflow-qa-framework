@@ -50,7 +50,8 @@ class AIClient:
         response = requests.post(
             endpoint,
             json={"prompt": prompt},
-            timeout=5
+            timeout=5,
+            verify=False   # <-- important for CI self-signed certs
         )
 
         # Print response for debugging (visible in terminal or GitHub Actions logs)
@@ -75,7 +76,8 @@ class AIClient:
 
         response = requests.get(
             health_url,
-            timeout=5
+            timeout=5,
+            verify=False
         )
 
         response.raise_for_status()
