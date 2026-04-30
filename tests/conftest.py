@@ -5,7 +5,7 @@ from framework.api_client import AIClient
 
 @pytest.fixture
 def client():
-    return AIClient("https://localhost:5050")
+    return AIClient("https://localhost:5000")
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ def mock_ai_service():
             context.status_code = 200
             return {"response": f"Mocked response: {prompt}"}
 
-        m.post("https://localhost:5050/chat", json=dynamic_response)
-        m.get("https://localhost:5050/health", status_code=200)
+        m.post("https://localhost:5000/chat", json=dynamic_response)
+        m.get("https://localhost:5000/health", status_code=200)
 
         yield m
