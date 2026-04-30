@@ -1,35 +1,28 @@
 import pytest
-import requests_mock
+import subprocess
+import time
 from framework.api_client import AIClient
+
+
+@pytest.fixture(scope="session", autouse=True)
+def start_local_server():
+    """
+    Starts the local AI test server before tests run
+    and shuts it down afterward.
+    """
+    process = subprocess.Popen(["python", "local_ai_server.py"])
+
+    # give server time to start
+    time.sleep(2)
+
+    yield
+
+    process.terminate()
+
 
 @pytest.fixture
 def client():
-    """Provides an instance of the AIClient to tests."""
-    # We pass a URL because your tests are expecting to initialize with one
-    return AIClient("https://api.example.com/chat")
-@pytest.fixture(autouse=True)
-def mock_ai_service():
-    with requests_mock.Mocker() as m:
-        def dynamic_response(request, context):
-            # Parse the JSON body sent by the AIClient
-            data = request.json()
-            prompt = data.get("prompt", "")
-
-            if prompt == "" or prompt is None:
-                context.status_code = 400
-                return {"error": "Bad Request", "message": "Prompt cannot be empty or null"}
-            
-            # Default successful response
-            context.status_code = 200
-            return {
-                "status": "success", 
-                "response": f"Mocked response for: {prompt}"
-            }
-
-        # Register the callback for POST requests
-        m.post("https://api.example.com/chat", json=dynamic_response)
-        
-        # Keep a simple 200 for the health check GET request
-        m.get("https://api.example.com/chat", status_code=200)
-        
-        yield m
+    """
+    Provides an instance of the AIClient pointing to localhost.
+    """
+    return AIClient("http://localhost:5000")
