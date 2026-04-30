@@ -1,29 +1,37 @@
-def dynamic_response(request, context):
-    data = request.json()
-    prompt = data.get("prompt")
+import pytest
+import requests_mock
+from framework.api_client import AIClient
 
-    # -----------------------
-    # VALIDATION RULES
-    # -----------------------
 
-    # None or missing
-    if prompt is None:
-        context.status_code = 400
-        return {"error": "Prompt cannot be null"}
+@pytest.fixture
+def client():
+    return AIClient("https://localhost:5000")
 
-    # Empty string
-    if isinstance(prompt, str) and prompt.strip() == "":
-        context.status_code = 400
-        return {"error": "Prompt cannot be empty"}
 
-    # Very large payload
-    if isinstance(prompt, str) and len(prompt) > 5000:
-        context.status_code = 413
-        return {"error": "Payload too large"}
+@pytest.fixture(autouse=True)
+def mock_ai_service():
+    with requests_mock.Mocker() as m:
 
-    # Default success
-    context.status_code = 200
-    return {
-        "status": "success",
-        "response": f"Mocked response for: {prompt}"
-    }
+        def dynamic_response(request, context):
+            data = request.json()
+            prompt = data.get("prompt")
+
+            if prompt is None:
+                context.status_code = 400
+                return {"error": "Prompt is null"}
+
+            if isinstance(prompt, str) and prompt.strip() == "":
+                context.status_code = 400
+                return {"error": "Prompt is empty"}
+
+            if isinstance(prompt, str) and len(prompt) > 5000:
+                context.status_code = 413
+                return {"error": "Payload too large"}
+
+            context.status_code = 200
+            return {"response": f"Mocked response: {prompt}"}
+
+        m.post("https://localhost:5000/chat", json=dynamic_response)
+        m.get("https://localhost:5000/health", status_code=200)
+
+        yield m
