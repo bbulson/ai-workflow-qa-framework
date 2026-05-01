@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Pytest-html / local runs
+reports/report.html
+reports/ai_responses.csv

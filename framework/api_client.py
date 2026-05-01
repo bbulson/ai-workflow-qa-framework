@@ -39,6 +39,15 @@ class AIClient:
                 response.elapsed.total_seconds()
             ])
 
+    @staticmethod
+    def _safe_text(value):
+        """
+        Return a console-safe representation for Windows cp1252 terminals.
+        Preserves readability while avoiding UnicodeEncodeError on emoji.
+        """
+        text = str(value)
+        return text.encode("ascii", "backslashreplace").decode("ascii")
+
     def send_prompt(self, prompt):
         """
         Sends a prompt to the chatbot API and returns the response object.
@@ -56,15 +65,58 @@ class AIClient:
 
         # Print response for debugging (visible in terminal or GitHub Actions logs)
         try:
-            print("PROMPT:", prompt)
-            print("RESPONSE:", response.json())
+            print("PROMPT:", self._safe_text(prompt))
+            print("RESPONSE:", self._safe_text(response.json()))
         except Exception:
-            print("PROMPT:", prompt)
-            print("RESPONSE:", response.text)
+            print("PROMPT:", self._safe_text(prompt))
+            print("RESPONSE:", self._safe_text(response.text))
 
         # Save response to CSV
         self._log_response(prompt, response)
 
+        return response
+
+    def send_chat_payload(self, payload):
+        """
+        POST /chat with an arbitrary JSON object (contract tests: missing key,
+        wrong types, extra fields).
+        """
+        endpoint = self.url if self.url.endswith("/chat") else f"{self.url}/chat"
+        response = requests.post(
+            endpoint,
+            json=payload,
+            timeout=5,
+            verify=False,
+        )
+        try:
+            print("PAYLOAD:", self._safe_text(payload))
+            print("RESPONSE:", self._safe_text(response.json()))
+        except Exception:
+            print("PAYLOAD:", self._safe_text(payload))
+            print("RESPONSE:", self._safe_text(response.text))
+        self._log_response(repr(payload), response)
+        return response
+
+    def send_chat_raw(self, body, content_type="application/json"):
+        """
+        POST /chat with a raw body string (malformed JSON, wrong Content-Type).
+        """
+        endpoint = self.url if self.url.endswith("/chat") else f"{self.url}/chat"
+        headers = {"Content-Type": content_type}
+        response = requests.post(
+            endpoint,
+            data=body,
+            headers=headers,
+            timeout=5,
+            verify=False,
+        )
+        try:
+            print("RAW BODY:", self._safe_text(body[:200] if body else body))
+            print("RESPONSE:", self._safe_text(response.json()))
+        except Exception:
+            print("RAW BODY:", self._safe_text(body[:200] if body else body))
+            print("RESPONSE:", self._safe_text(response.text))
+        self._log_response(body, response)
         return response
 
     def check_health(self):

@@ -76,11 +76,23 @@ To reproduce specific test failures locally:
     ```bash
     pytest -v --html=reports/debug_report.html
     ```
+    **Python code coverage** runs with every `pytest` via `pytest-cov` in `pytest.ini` (`framework` + `mock_server`, term-missing report, **`--cov-fail-under=85`**). That is separate from **JMeter**, which measures load and latency, not statement coverage.
 3.  **Execute Performance Tests:**
     *(Requires local JMeter 5.6.3 installation)*
     ```bash
     ./jmeter/bin/jmeter -n -t jmeter_test_plan.jmx -l results.jtl -Jjmeter.save.saveservice.output_format=csv
     ```
+
+---
+
+## API Contract (Tested)
+- `POST /chat` accepts JSON payloads with a `prompt` field.
+- `prompt is null` or missing -> `400` with a JSON body that includes a non-empty string `error` (`Prompt is null`). Invalid or unparseable JSON is treated like an empty object, so missing `prompt` yields the same outcome.
+- `prompt` is present but not a JSON string (number, boolean, array, object) -> `400` with `error` containing `Prompt must be a string`.
+- `prompt` as empty/whitespace-only string -> `400` with a JSON body that includes a non-empty string `error`.
+- `len(prompt) > 5000` (Unicode code points, not bytes) -> `413` with a JSON body that includes a non-empty string `error`.
+- Any non-empty string prompt (including unicode, emoji, and symbols) with `len(prompt) <= 5000` -> `200` with a JSON body containing exactly one key: `response` (non-empty string).
+- Error schema is flexible by contract: responses must include `error`, and may include additional keys such as `code`, `details`, or `request_id`.
 
 ---
 

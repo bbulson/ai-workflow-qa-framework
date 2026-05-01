@@ -5,8 +5,10 @@ on:
     paths:
       - 'tests/**'
       - 'framework/**'
+      - 'mock_server/**'
       - 'requirements.txt'
       - 'docker-compose.yml'
+      - 'pytest.ini'
 
 jobs:
   test:
@@ -67,7 +69,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
           DATABASE_URL: postgresql://qauser:qapassword@localhost:5432/qadb
-        run: pytest tests --html=reports/report.html --self-contained-html
+        run: pytest tests
 
       # ---------------------------
       # PERFORMANCE TESTS (JMETER)
