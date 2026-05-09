@@ -25,13 +25,6 @@ public class TestBase : PageTest
         {
             ["Accept"] = "application/json, text/html"
         });
-            // Start Playwright trace recording
-        await Context.Tracing.StartAsync(new()
-        {
-            Screenshots = true,
-            Snapshots = true,
-            Sources = true
-        });
     }
 
     [TearDown]
