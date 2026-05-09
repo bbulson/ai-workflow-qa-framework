@@ -6,8 +6,7 @@ namespace PlaywrightTests;
 
 /// <summary>
 /// Base class for all UI tests. Handles browser setup, teardown,
-/// screenshot capture on failure, trace capture on failure,
-/// and shared config like BaseUrl.
+/// screenshot capture on failure, and shared config like BaseUrl.
 /// All test classes inherit from this instead of PageTest directly.
 /// </summary>
 [Parallelizable(ParallelScope.Self)]
@@ -26,60 +25,32 @@ public class TestBase : PageTest
         {
             ["Accept"] = "application/json, text/html"
         });
-
-        // Start tracing for every test - we save the trace only on failure in TearDown
-        await Context.Tracing.StartAsync(new TracingStartOptions
-        {
-            Screenshots = true,  // embed screenshots in the trace timeline
-            Snapshots = true,    // enable snapshot-based step inspection in trace viewer
-            Sources = true       // embed C# source lines in the trace
-        });
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        var failed = TestContext.CurrentContext.Result.Outcome.Status ==
-                     NUnit.Framework.Interfaces.TestStatus.Failed;
-
-        var testName = TestContext.CurrentContext.Test.Name;
-        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var workDir  = TestContext.CurrentContext.WorkDirectory;
-
-        if (failed)
+        // On failure, capture a screenshot for the CI artifact report
+        if (TestContext.CurrentContext.Result.Outcome.Status == NUnit.Framework.Interfaces.TestStatus.Failed)
         {
-            // ── Screenshot ────────────────────────────────────────────────
-            var screenshotDir = Path.Combine(workDir, "reports", "screenshots");
+            var screenshotDir = Path.Combine(TestContext.CurrentContext.WorkDirectory, "reports", "screenshots");
             Directory.CreateDirectory(screenshotDir);
 
-            var screenshotPath = Path.Combine(screenshotDir, $"{testName}_{timestamp}.png");
+            var fileName = $"{TestContext.CurrentContext.Test.Name}_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+            var screenshotPath = Path.Combine(screenshotDir, fileName);
+
             await Page.ScreenshotAsync(new PageScreenshotOptions
             {
                 Path = screenshotPath,
                 FullPage = true
             });
+
             TestContext.WriteLine($"Screenshot saved: {screenshotPath}");
-
-            // ── Trace ─────────────────────────────────────────────────────
-            var traceDir = Path.Combine(workDir, "reports", "traces");
-            Directory.CreateDirectory(traceDir);
-
-            var tracePath = Path.Combine(traceDir, $"{testName}_{timestamp}.zip");
-            await Context.Tracing.StopAsync(new TracingStopOptions
-            {
-                Path = tracePath
-            });
-            TestContext.WriteLine($"Trace saved: {tracePath}");
-        }
-        else
-        {
-            // Stop tracing without saving - test passed, no need to keep the trace
-            await Context.Tracing.StopAsync(new TracingStopOptions());
         }
     }
 
     /// <summary>
-    /// Returns Playwright browser context options - headless in CI, headed locally.
+    /// Returns Playwright browser launch options - headless in CI, headed locally.
     /// </summary>
     public override BrowserNewContextOptions ContextOptions()
     {

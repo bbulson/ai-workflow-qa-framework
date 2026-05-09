@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   qa-tests:
     runs-on: ubuntu-latest
@@ -19,15 +16,15 @@ jobs:
     # ─────────────────────────────────────────────────────────────────
 
     - name: Checkout repository
-      uses: actions/checkout@v4.2.2
+      uses: actions/checkout@v4
 
     - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4.3.1
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
     - name: Setup Python
-      uses: actions/setup-python@v5.6.0
+      uses: actions/setup-python@v5
       with:
         python-version: "3.11"
 
@@ -56,7 +53,6 @@ jobs:
       run: |
         mkdir -p reports/playwright
         mkdir -p reports/screenshots
-        mkdir -p reports/traces
         mkdir -p reports/jmeter
 
     # ─────────────────────────────────────────────────────────────────
@@ -115,10 +111,10 @@ jobs:
 
     # ─────────────────────────────────────────────────────────────────
     # PLAYWRIGHT TESTS
-    # TestBase.cs starts a trace for every test and saves screenshot +
-    # trace zip on failure to WorkDirectory/reports/{screenshots,traces}.
-    # NUnit sets WorkDirectory to bin/Debug/net8.0, so we copy both
-    # into reports/ afterwards for the unified dashboard artifact.
+    # Screenshots are taken on failure by TestBase.cs TearDown and
+    # written to WorkDirectory/reports/screenshots. NUnit sets
+    # WorkDirectory to the bin/Debug/net8.0 folder, so we copy them
+    # into reports/screenshots for the unified dashboard artifact.
     # ─────────────────────────────────────────────────────────────────
 
     - name: Run Playwright API tests
@@ -165,8 +161,8 @@ jobs:
           --settings PlaywrightTests/.runsettings
       continue-on-error: true
 
-    # Copy screenshots and traces from NUnit WorkDirectory (bin folder)
-    # into reports/ so they are included in the unified dashboard artifact.
+    # Copy screenshots from NUnit's WorkDirectory (bin folder) into reports/
+    # so they are included in the unified dashboard artifact.
     - name: Collect Playwright screenshots
       if: always()
       run: |
@@ -174,21 +170,9 @@ jobs:
         DEST="reports/screenshots"
         if [ -d "$SRC" ] && [ "$(ls -A $SRC 2>/dev/null)" ]; then
           cp -r "$SRC"/. "$DEST"/
-          echo "Copied $(ls $DEST | wc -l) screenshots to $DEST"
+          echo "Copied $(ls $DEST | wc -l) screenshots to reports/screenshots"
         else
           echo "No screenshots found in $SRC"
-        fi
-
-    - name: Collect Playwright traces
-      if: always()
-      run: |
-        SRC="PlaywrightTests/bin/Debug/net8.0/reports/traces"
-        DEST="reports/traces"
-        if [ -d "$SRC" ] && [ "$(ls -A $SRC 2>/dev/null)" ]; then
-          cp -r "$SRC"/. "$DEST"/
-          echo "Copied $(ls $DEST | wc -l) traces to $DEST"
-        else
-          echo "No traces found in $SRC"
         fi
 
     # ─────────────────────────────────────────────────────────────────
@@ -215,7 +199,7 @@ jobs:
       continue-on-error: true
 
     # ─────────────────────────────────────────────────────────────────
-    # DASHBOARD — embed screenshots inline, link to traces
+    # DASHBOARD — embed screenshots inline so they work from a zip
     # ─────────────────────────────────────────────────────────────────
 
     - name: Generate QA dashboard
@@ -229,19 +213,9 @@ jobs:
           b64=$(base64 -w 0 "$f")
           SCREENSHOT_HTML+="<div class='screenshot'><p>$name</p><img src='data:image/png;base64,$b64'></div>"
         done
+
         if [ -z "$SCREENSHOT_HTML" ]; then
           SCREENSHOT_HTML="<p>No screenshots captured (all tests passed or server unreachable).</p>"
-        fi
-
-        # Build trace links
-        TRACE_HTML=""
-        for f in reports/traces/*.zip; do
-          [ -f "$f" ] || continue
-          name=$(basename "$f")
-          TRACE_HTML+="<li><a href='traces/$name'>$name</a> &nbsp;<small>(open with <code>playwright show-trace $name</code>)</small></li>"
-        done
-        if [ -z "$TRACE_HTML" ]; then
-          TRACE_HTML="<li>No traces captured (all tests passed).</li>"
         fi
 
         cat > reports/dashboard.html << DASHBOARD
@@ -264,9 +238,6 @@ jobs:
             }
             a { color: #2980b9; text-decoration: none; font-weight: bold; }
             a:hover { text-decoration: underline; }
-            code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-            ul { margin: 0; padding-left: 20px; }
-            li { margin: 6px 0; }
             .screenshot { display: inline-block; margin: 8px; text-align: center; vertical-align: top; }
             .screenshot p { font-size: 11px; margin: 4px 0; word-break: break-all; max-width: 320px; }
             .screenshot img { max-width: 320px; border: 1px solid #ccc; border-radius: 4px; display: block; }
@@ -294,13 +265,6 @@ jobs:
           </div>
 
           <div class="card">
-            <h2>Playwright Traces (on failure)</h2>
-            <p>Download a trace zip and open it locally with:<br>
-            <code>playwright show-trace &lt;file&gt;.zip</code></p>
-            <ul>$TRACE_HTML</ul>
-          </div>
-
-          <div class="card">
             <h2>Performance Testing (JMeter)</h2>
             <a href="jmeter/index.html">Open JMeter Dashboard</a>
           </div>
@@ -320,7 +284,7 @@ jobs:
     # inside the same zip so all relative paths resolve correctly.
     - name: Upload unified QA dashboard
       if: always()
-      uses: actions/upload-artifact@v4.6.2
+      uses: actions/upload-artifact@v4
       with:
         name: qa-test-dashboard
         path: reports
