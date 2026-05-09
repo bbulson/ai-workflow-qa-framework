@@ -64,40 +64,37 @@ public class EdgeCaseTests : TestBase
     }
 
     [Test]
-    [Description("Very long prompt (5000+ chars) shows appropriate UI feedback")]
+    [Description("Very long prompt (>5000 chars) is submitted and the UI surfaces a graceful error response")]
     public async Task VeryLongPrompt_ShowsUIFeedback()
     {
         var longPrompt = string.Concat(Enumerable.Repeat("AI ", 2000)); // ~6000 chars
 
-        // We're not asserting status code here (API tests cover that).
-        // We're validating that the UI resolves the request without freezing.
-
-        var spinner = Page.GetByTestId("loading-spinner");
         var errorBanner = Page.GetByTestId("error-banner");
-        var response = Page.GetByTestId("response-output");
+        var response    = Page.GetByTestId("response-output");
 
-        // Fill and submit via the page directly so we can observe the
-        // spinner in-flight (SendPromptAsync already waits for it to hide).
+        // Submit via Page directly (SendPromptAsync waits for the spinner internally
+        // and would block us from checking the final UI state independently).
         await Page.GetByTestId("prompt-input").FillAsync(longPrompt);
         await Page.GetByTestId("submit-btn").ClickAsync();
 
-        // Spinner should appear now that the request is in-flight.
-        // Use a short timeout: the mock server responds quickly even for 413s.
-        await Expect(spinner).ToBeVisibleAsync(new() { Timeout = 3000 });
+        // Wait for the UI to resolve. The mock server returns 413 for payloads
+        // over 5000 chars, so we expect the error banner to appear.
+        // We do NOT assert the loading spinner was visible: the server responds
+        // in ~8ms (confirmed by JMeter JTL) which is faster than Playwright's
+        // polling interval — asserting spinner visibility would be a race condition,
+        // not a meaningful test of application behaviour.
+        await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        // Spinner must eventually disappear (request resolved one way or another)
-        await Expect(spinner).ToBeHiddenAsync(new() { Timeout = 30000 });
-
-        // Final UI state: mock server returns 413 for >5000 chars, so the UI
-        // surfaces an error banner. Either that or a response is acceptable —
-        // what's not acceptable is the page freezing or spinner staying forever.
+        // Either an error banner OR a response is acceptable UI state.
+        // What is never acceptable: the page freezing with neither.
         var isErrorVisible = await errorBanner.IsVisibleAsync();
         var hasResponse =
             await response.IsVisibleAsync() &&
             !string.IsNullOrWhiteSpace(await response.InnerTextAsync());
 
         (isErrorVisible || hasResponse).Should().BeTrue(
-            because: "AC2 requires oversized input to resolve with either an error state or a response, but never a frozen UI");
+            because: "AC2 requires oversized input to resolve with either an error state " +
+                     "or a response — a frozen UI with neither is a failure");
     }
 
     [Test]
