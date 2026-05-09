@@ -57,13 +57,14 @@ public class EdgeCaseTests : TestBase
         response.Should().NotBeNullOrWhiteSpace(
             because: "AC2 requires emoji/symbol resilience without service interruption");
 
-        // Ensure the emoji wasn't stripped or mangled in the response display
-        // The mock echoes the prompt back, so some form of the content should appear
+        // Ensure the emoji wasn't stripped or mangled in the response display.
+        // The mock echoes the prompt back, so some form of the content should appear.
         response.Should().NotContain("undefined",
             because: "a JS rendering failure often shows 'undefined' instead of content");
     }
 
     [Test]
+    [Category("AlwaysTrace")]
     [Description("Very long prompt (>5000 chars) is submitted and the UI surfaces a graceful error response")]
     public async Task VeryLongPrompt_ShowsUIFeedback()
     {
@@ -72,8 +73,8 @@ public class EdgeCaseTests : TestBase
         var errorBanner = Page.GetByTestId("error-banner");
         var response    = Page.GetByTestId("response-output");
 
-        // Submit via Page directly (SendPromptAsync waits for the spinner internally
-        // and would block us from checking the final UI state independently).
+        // Submit via Page directly — SendPromptAsync waits for the spinner
+        // internally and would prevent us checking final UI state independently.
         await Page.GetByTestId("prompt-input").FillAsync(longPrompt);
         await Page.GetByTestId("submit-btn").ClickAsync();
 
@@ -81,11 +82,11 @@ public class EdgeCaseTests : TestBase
         // over 5000 chars, so we expect the error banner to appear.
         // We do NOT assert the loading spinner was visible: the server responds
         // in ~8ms (confirmed by JMeter JTL) which is faster than Playwright's
-        // polling interval — asserting spinner visibility would be a race condition,
-        // not a meaningful test of application behaviour.
+        // polling interval — asserting spinner visibility would be a race
+        // condition, not a meaningful test of application behaviour.
         await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
 
-        // Either an error banner OR a response is acceptable UI state.
+        // Either an error banner OR a response is acceptable final UI state.
         // What is never acceptable: the page freezing with neither.
         var isErrorVisible = await errorBanner.IsVisibleAsync();
         var hasResponse =
