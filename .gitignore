@@ -1,0 +1,36 @@
+# SQLite runtime database
+data/*.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Pytest cache
+.pytest_cache/
+
+# Virtual environments
+venv/
+.env
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+
+#Reports
+reports/
+
+# Ignore the JMeter installation folder
+apache-jmeter-5.6.3/
+
+# Ignore the downloaded archive
+apache-jmeter-5.6.3.tgz
+
+# Ignore test results and logs
+*.jtl
+jmeter.log
+
+#certificates
+certs/

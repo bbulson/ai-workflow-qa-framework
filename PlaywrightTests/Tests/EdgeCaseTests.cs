@@ -1,0 +1,120 @@
+using FluentAssertions;
+using NUnit.Framework;
+using PlaywrightTests.Pages;
+
+namespace PlaywrightTests.Tests;
+
+/// <summary>
+/// Edge case and boundary condition UI tests.
+/// Mirrors test_edge_cases.py - same scenarios, but validated through the
+/// browser. Catches UI bugs that pass the API layer (e.g. the error banner
+/// renders but shows no text, or the spinner never disappears).
+/// </summary>
+[TestFixture]
+[Category("EdgeCases")]
+public class EdgeCaseTests : TestBase
+{
+    private ChatPage _chatPage = null!;
+
+    [SetUp]
+    public new async Task SetUp()
+    {
+        await base.SetUp();
+        _chatPage = new ChatPage(Page);
+        await _chatPage.GotoAsync(BaseUrl);
+    }
+
+    [Test]
+    [Description("Empty prompt submission shows a user-facing error message")]
+    public async Task EmptyPrompt_ShowsErrorMessage()
+    {
+        // Click submit without typing anything
+        await _chatPage.ClickSubmitAsync();
+
+        var isErrorVisible = await _chatPage.IsErrorVisibleAsync();
+
+        isErrorVisible.Should().BeTrue(
+            because: "AC2 requires graceful handling of non-standard input - user must see feedback");
+    }
+
+    [Test]
+    [Description("Error message for empty prompt is readable and not blank")]
+    public async Task EmptyPrompt_ErrorMessage_IsNotBlank()
+    {
+        await _chatPage.ClickSubmitAsync();
+        var errorText = await _chatPage.GetErrorMessageAsync();
+
+        errorText.Should().NotBeNullOrWhiteSpace(
+            because: "an empty error banner is worse than no banner - user gets no guidance");
+    }
+
+    [Test]
+    [Description("Emojis and special characters render correctly in the response area")]
+    public async Task SpecialCharacters_RenderCorrectlyInUI()
+    {
+        var response = await _chatPage.SendPromptAsync("🚀 Test with Emojis and Symbols!@#$");
+
+        response.Should().NotBeNullOrWhiteSpace(
+            because: "AC2 requires emoji/symbol resilience without service interruption");
+
+        // Ensure the emoji wasn't stripped or mangled in the response display
+        // The mock echoes the prompt back, so some form of the content should appear
+        response.Should().NotContain("undefined",
+            because: "a JS rendering failure often shows 'undefined' instead of content");
+    }
+
+    [Test]
+    [Description("Very long prompt (5000+ chars) shows appropriate UI feedback")]
+    public async Task VeryLongPrompt_ShowsUIFeedback()
+    {
+        var longPrompt = string.Concat(Enumerable.Repeat("AI ", 2000)); // ~6000 chars
+
+        // We're not asserting status code here (Python tests handle that);
+        // we're asserting the UI doesn't hang or crash
+            // Send the prompt 
+        await _chatPage.SendPromptAsync(longPrompt);
+            // Now check the UI actually responded in some way
+        var isErrorVisible = await _chatPage.IsErrorVisibleAsync();
+
+        // Either an error banner appears OR a response appears - both are acceptable UI states
+        // What's NOT acceptable: the page freezes or the spinner never resolves
+        var hasResponse = !string.IsNullOrWhiteSpace(
+            await Page.GetByTestId("response-output").InnerTextAsync().ConfigureAwait(false)
+        );
+
+        (isErrorVisible || hasResponse).Should().BeTrue(
+            because: "AC2 requires the UI to respond to oversized input without hanging");
+    }
+
+    [Test]
+    [Description("Gibberish input returns a response without crashing the UI")]
+    public async Task GibberishPrompt_DoesNotCrashUI()
+    {
+        var response = await _chatPage.SendPromptAsync("asdkfjasldkfj123!##");
+
+        // No assertion on content - just that the UI stayed alive and rendered something
+        response.Should().NotBeNull(
+            because: "the UI should handle any string input without throwing a JS exception");
+
+        // Verify the page is still interactive after a weird prompt
+        var isSubmitEnabled = await _chatPage.IsSubmitButtonEnabledAsync();
+        isSubmitEnabled.Should().BeTrue(
+            because: "the UI should recover and allow another prompt after any input");
+    }
+
+    [Test]
+    [Description("SQL injection string is handled safely and displayed as plain text")]
+    public async Task SqlInjectionString_RendersAsSafeText()
+    {
+        var sqlPayload = "'; DROP TABLE users; --";
+        var response = await _chatPage.SendPromptAsync(sqlPayload);
+
+        // The response area should show text, not execute anything
+        response.Should().NotBeNullOrWhiteSpace();
+
+        // Crucially - the page should still be intact
+        var title = await _chatPage.GetPageTitleAsync();
+        title.Should().NotBeNullOrWhiteSpace(
+            because: "a SQL injection string in the UI should never break the page structure");
+    }
+}

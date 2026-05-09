@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Workflow QA — Chat Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design tokens ─────────────────────────────────────────── */
+    :root {
+      --bg:          #0b0c0f;
+      --surface:     #13151a;
+      --surface2:    #1c1f27;
+      --border:      #2a2d38;
+      --accent:      #00e5a0;
+      --accent-dim:  #00e5a022;
+      --accent2:     #5b6af0;
+      --text:        #e8eaf0;
+      --text-muted:  #6b7180;
+      --user-bubble: #1c2a40;
+      --bot-bubble:  #141a14;
+      --danger:      #ff5c5c;
+      --font-display: 'Syne', sans-serif;
+      --font-mono:    'DM Mono', monospace;
+      --radius:       10px;
+      --transition:   180ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ── Reset ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise texture overlay ─────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────── */
+    .app {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 820px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0 16px 24px;
+    }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 0 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .logo-mark svg { width: 18px; height: 18px; }
+
+    .logo-text {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    /* ── Health badge ──────────────────────────────────────────── */
+    .health-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .health-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background var(--transition);
+    }
+
+    .health-dot.ok   { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    .health-dot.fail { background: var(--danger); }
+
+    /* ── Chat history ──────────────────────────────────────────── */
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 0 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .chat-history::-webkit-scrollbar { width: 4px; }
+    .chat-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* individual message */
+    .chat-message {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      animation: msgIn 220ms ease both;
+    }
+
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-message.user { align-items: flex-end; }
+    .chat-message.bot  { align-items: flex-start; }
+
+    .message-label {
+      font-size: 10px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 4px;
+    }
+
+    .message-bubble {
+      max-width: 78%;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      line-height: 1.65;
+      word-break: break-word;
+    }
+
+    .chat-message.user .message-bubble {
+      background: var(--user-bubble);
+      border: 1px solid #2a3d55;
+      color: var(--text);
+      border-bottom-right-radius: 3px;
+    }
+
+    .chat-message.bot .message-bubble {
+      background: var(--bot-bubble);
+      border: 1px solid #1f2e1f;
+      color: var(--accent);
+      border-bottom-left-radius: 3px;
+      font-family: var(--font-mono);
+    }
+
+    /* ── Empty state ───────────────────────────────────────────── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+      padding: 60px 0;
+      text-align: center;
+    }
+
+    .empty-state-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      line-height: 1.6;
+      max-width: 260px;
+    }
+
+    /* ── Response output (latest) ──────────────────────────────── */
+    /* Hidden element that always holds the most recent bot reply  */
+    /* This is what ChatPage.cs reads via ResponseContainer        */
+    #response-output {
+      display: none;
+    }
+
+    /* ── Error banner ──────────────────────────────────────────── */
+    .error-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      background: #1f1010;
+      border: 1px solid #4a2020;
+      color: var(--danger);
+      font-size: 13px;
+      margin-bottom: 10px;
+      animation: msgIn 180ms ease both;
+    }
+
+    .error-banner.visible { display: flex; }
+
+    /* ── Input area ────────────────────────────────────────────── */
+    .input-area {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    textarea[data-testid="prompt-input"] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 12px 14px;
+      resize: none;
+      min-height: 48px;
+      max-height: 160px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+
+    textarea[data-testid="prompt-input"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    textarea[data-testid="prompt-input"]::placeholder {
+      color: var(--text-muted);
+    }
+
+    button[data-testid="submit-btn"] {
+      height: 48px;
+      width: 48px;
+      flex-shrink: 0;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+
+    button[data-testid="submit-btn"]:hover {
+      opacity: 0.88;
+      box-shadow: 0 0 14px var(--accent-dim);
+    }
+
+    button[data-testid="submit-btn"]:active { transform: scale(0.96); }
+
+    button[data-testid="submit-btn"]:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button[data-testid="submit-btn"] svg { width: 20px; height: 20px; color: #000; }
+
+    /* ── Loading spinner ───────────────────────────────────────── */
+    .loading-spinner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 2px 0;
+    }
+
+    .loading-spinner.visible { display: flex; }
+
+    .spinner-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .spinner-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: bounce 1.2s ease infinite;
+    }
+
+    .spinner-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .spinner-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+
+    /* ── Footer hint ───────────────────────────────────────────── */
+    .input-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    .input-hint kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── Header ───────────────────────────────────────────── -->
+    <header>
+      <div class="logo">
+        <div class="logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <span class="logo-text">AI<span>QA</span> Framework</span>
+      </div>
+
+      <div class="health-pill">
+        <div class="health-dot" id="health-dot"></div>
+        <!-- data-testid used by HealthCheckTests.cs -->
+        <span data-testid="health-status" id="health-status">checking…</span>
+      </div>
+    </header>
+
+    <!-- ── Chat history ─────────────────────────────────────── -->
+    <!-- data-testid used by ChatWorkflowTests.cs -->
+    <div class="chat-history" data-testid="chat-history" id="chat-history">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <p>Send a prompt to start the conversation. All responses come from the mock server.</p>
+      </div>
+    </div>
+
+    <!-- Hidden element: always contains the latest bot response text.  -->
+    <!-- ChatPage.cs reads this via GetByTestId("response-output")      -->
+    <div data-testid="response-output" id="response-output"></div>
+
+    <!-- ── Error banner ─────────────────────────────────────── -->
+    <!-- data-testid used by EdgeCaseTests.cs -->
+    <div class="error-banner" data-testid="error-banner" id="error-banner" role="alert">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="error-text"></span>
+    </div>
+
+    <!-- ── Input area ────────────────────────────────────────── -->
+    <div class="input-area">
+      <!-- data-testid used by EdgeCaseTests.cs / ChatWorkflowTests.cs -->
+      <div class="loading-spinner" data-testid="loading-spinner" id="loading-spinner">
+        <div class="spinner-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <span>Processing…</span>
+      </div>
+
+      <div class="input-row">
+        <!-- data-testid used by ChatPage.cs PromptInput locator -->
+        <textarea
+          data-testid="prompt-input"
+          id="prompt-input"
+          placeholder="Type a prompt and press Enter or click Send…"
+          rows="1"
+        ></textarea>
+
+        <!-- data-testid used by ChatPage.cs SubmitButton locator -->
+        <button data-testid="submit-btn" id="submit-btn" title="Send (Enter)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="input-hint">
+        <kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Element refs ───────────────────────────────────────────────
+    const promptInput   = document.getElementById('prompt-input');
+    const submitBtn     = document.getElementById('submit-btn');
+    const chatHistory   = document.getElementById('chat-history');
+    const emptyState    = document.getElementById('empty-state');
+    const responseOut   = document.getElementById('response-output');
+    const errorBanner   = document.getElementById('error-banner');
+    const errorText     = document.getElementById('error-text');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const healthStatus  = document.getElementById('health-status');
+    const healthDot     = document.getElementById('health-dot');
+
+    // ── Auto-grow textarea ─────────────────────────────────────────
+    promptInput.addEventListener('input', () => {
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 160) + 'px';
+    });
+
+    // ── Enter to submit (Shift+Enter for newline) ──────────────────
+    promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    });
+
+    submitBtn.addEventListener('click', handleSubmit);
+
+    // ── Health check on load ───────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        if (data.status === 'ok') {
+          healthStatus.textContent = 'ok';
+          healthDot.className = 'health-dot ok';
+        } else {
+          throw new Error('not ok');
+        }
+      } catch {
+        healthStatus.textContent = 'offline';
+        healthDot.className = 'health-dot fail';
+      }
+    }
+
+    // ── Show/hide error banner ─────────────────────────────────────
+    function showError(msg) {
+      errorText.textContent = msg;
+      errorBanner.classList.add('visible');
+    }
+
+    function hideError() {
+      errorBanner.classList.remove('visible');
+      errorText.textContent = '';
+    }
+
+    // ── Append a message bubble to history ─────────────────────────
+    function appendMessage(role, text) {
+      // Remove empty state on first message
+      if (emptyState) emptyState.remove();
+
+      const wrapper = document.createElement('div');
+      wrapper.className = `chat-message ${role}`;
+
+      const label = document.createElement('div');
+      label.className = 'message-label';
+      label.textContent = role === 'user' ? 'You' : 'AI';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = text;
+
+      wrapper.appendChild(label);
+      wrapper.appendChild(bubble);
+      chatHistory.appendChild(wrapper);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    // ── Main submit handler ────────────────────────────────────────
+    async function handleSubmit() {
+      const prompt = promptInput.value; // intentionally not trimmed yet for edge case testing
+
+      // Validate before sending
+      if (!prompt || prompt.trim() === '') {
+        showError('Prompt cannot be empty. Please type something before submitting.');
+        return;
+      }
+
+      hideError();
+
+      // UI state: loading
+      submitBtn.disabled = true;
+      loadingSpinner.classList.add('visible');
+      appendMessage('user', prompt);
+
+      // Clear input (Playwright's ChatWorkflowTests checks this)
+      promptInput.value = '';
+      promptInput.style.height = 'auto';
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          // 400, 413, etc - surface the server error message
+          const errMsg = data.error || `Server error ${res.status}`;
+          showError(errMsg);
+          // Also write to response-output so Playwright can read it
+          responseOut.textContent = '';
+        } else {
+          const reply = data.response ?? '';
+          appendMessage('bot', reply);
+          // Always update the hidden output element so Playwright
+          // can read the latest response via GetByTestId("response-output")
+          responseOut.textContent = reply;
+        }
+      } catch (err) {
+        showError('Network error — could not reach the server.');
+        responseOut.textContent = '';
+      } finally {
+        // UI state: ready
+        loadingSpinner.classList.remove('visible');
+        submitBtn.disabled = false;
+        promptInput.focus();
+      }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────
+    checkHealth();
+  </script>
+</body>
+</html>
