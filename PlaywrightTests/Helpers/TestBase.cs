@@ -25,6 +25,13 @@ public class TestBase : PageTest
         {
             ["Accept"] = "application/json, text/html"
         });
+            // Start Playwright trace recording
+        await Context.Tracing.StartAsync(new()
+        {
+            Screenshots = true,
+            Snapshots = true,
+            Sources = true
+        });
     }
 
     [TearDown]
@@ -46,6 +53,18 @@ public class TestBase : PageTest
             });
 
             TestContext.WriteLine($"Screenshot saved: {screenshotPath}");
+            var traceDir = Path.Combine(TestContext.CurrentContext.WorkDirectory, "reports", "traces");
+            Directory.CreateDirectory(traceDir);
+
+            var tracePath = Path.Combine(traceDir,
+                $"{TestContext.CurrentContext.Test.Name}_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+
+            await Context.Tracing.StopAsync(new()
+            {
+                Path = tracePath
+            });
+
+            TestContext.WriteLine($"Trace saved: {tracePath}");
         }
     }
 

@@ -69,18 +69,29 @@ public class EdgeCaseTests : TestBase
     {
         var longPrompt = string.Concat(Enumerable.Repeat("AI ", 2000)); // ~6000 chars
 
-        // We're not asserting status code here (Python tests handle that);
-        // we're asserting the UI doesn't hang or crash
-        var isErrorVisible = await _chatPage.IsErrorVisibleAsync();
+        // We're not asserting status code here (API tests cover that).
+        // We're validating that the UI resolves the request without freezing.
 
-        // Either an error banner appears OR a response appears - both are acceptable UI states
-        // What's NOT acceptable: the page freezes or the spinner never resolves
-        var hasResponse = !string.IsNullOrWhiteSpace(
-            await Page.GetByTestId("response-output").InnerTextAsync().ConfigureAwait(false)
-        );
+        var spinner = Page.GetByTestId("loading-spinner");
+        var response = Page.GetByTestId("response-output");
+        var errorBanner = Page.GetByTestId("error-banner");
 
-        (isErrorVisible || hasResponse).Should().BeTrue(
-            because: "AC2 requires the UI to respond to oversized input without hanging");
+        // Spinner must appear
+        await Expect(spinner).ToBeVisibleAsync();
+
+        // Spinner must eventually resolve
+        await Expect(spinner).ToBeHiddenAsync(new() { Timeout = 30000 });
+
+        // Now check final UI state
+
+        var isErrorVisible = await errorBanner.IsVisibleAsync();
+
+        var hasResponse =
+            await response.IsVisibleAsync() &&
+            !string.IsNullOrWhiteSpace(await response.InnerTextAsync());
+
+(isErrorVisible || hasResponse).Should().BeTrue(
+    because: "AC2 requires oversized input to resolve with either an error state or a response, but never a frozen UI");
     }
 
     [Test]
