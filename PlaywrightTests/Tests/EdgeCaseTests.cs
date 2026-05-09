@@ -73,25 +73,31 @@ public class EdgeCaseTests : TestBase
         // We're validating that the UI resolves the request without freezing.
 
         var spinner = Page.GetByTestId("loading-spinner");
-        var response = Page.GetByTestId("response-output");
         var errorBanner = Page.GetByTestId("error-banner");
+        var response = Page.GetByTestId("response-output");
 
-        // Spinner must appear
-        await Expect(spinner).ToBeVisibleAsync();
+        // Fill and submit via the page directly so we can observe the
+        // spinner in-flight (SendPromptAsync already waits for it to hide).
+        await Page.GetByTestId("prompt-input").FillAsync(longPrompt);
+        await Page.GetByTestId("submit-btn").ClickAsync();
 
-        // Spinner must eventually resolve
+        // Spinner should appear now that the request is in-flight.
+        // Use a short timeout: the mock server responds quickly even for 413s.
+        await Expect(spinner).ToBeVisibleAsync(new() { Timeout = 3000 });
+
+        // Spinner must eventually disappear (request resolved one way or another)
         await Expect(spinner).ToBeHiddenAsync(new() { Timeout = 30000 });
 
-        // Now check final UI state
-
+        // Final UI state: mock server returns 413 for >5000 chars, so the UI
+        // surfaces an error banner. Either that or a response is acceptable —
+        // what's not acceptable is the page freezing or spinner staying forever.
         var isErrorVisible = await errorBanner.IsVisibleAsync();
-
         var hasResponse =
             await response.IsVisibleAsync() &&
             !string.IsNullOrWhiteSpace(await response.InnerTextAsync());
 
-(isErrorVisible || hasResponse).Should().BeTrue(
-    because: "AC2 requires oversized input to resolve with either an error state or a response, but never a frozen UI");
+        (isErrorVisible || hasResponse).Should().BeTrue(
+            because: "AC2 requires oversized input to resolve with either an error state or a response, but never a frozen UI");
     }
 
     [Test]
