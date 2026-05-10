@@ -21,6 +21,12 @@ namespace PlaywrightTests;
 ///   - Also saved on passing tests tagged [Category("AlwaysTrace")], so you
 ///     can inspect specific tests in the Playwright trace viewer without
 ///     waiting for them to fail.
+///
+/// Note: SetUp intentionally has no [SetUp] attribute. Each subclass owns
+/// its own [SetUp] and calls await base.SetUp() explicitly. Adding [SetUp]
+/// here would cause NUnit to run it twice (once automatically, once via the
+/// subclass call), which double-starts tracing and fails every test with
+/// "Tracing has been already started".
 /// </summary>
 [Parallelizable(ParallelScope.Self)]
 public class TestBase : PageTest
@@ -29,7 +35,6 @@ public class TestBase : PageTest
 
     private readonly List<NetworkEntry> _networkLog = new();
 
-    [SetUp]
     public async Task SetUp()
     {
         BaseUrl = Environment.GetEnvironmentVariable("BASE_URL") ?? "https://localhost:5000";
