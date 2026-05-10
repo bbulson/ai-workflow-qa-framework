@@ -99,6 +99,33 @@ public class EdgeCaseTests : TestBase
     }
 
     [Test]
+    [Description("Oversized prompt returns a valid response (expected to fail — documents known 5000 char server limit)")]
+    public async Task VeryLongPrompt_ExceedsServerLimit_DocumentedFailure()
+    {
+        var longPrompt = string.Concat(Enumerable.Repeat("AI ", 2000)); // ~6000 chars
+
+        var errorBanner = Page.GetByTestId("error-banner");
+        var response    = Page.GetByTestId("response-output");
+
+        await Page.GetByTestId("prompt-input").FillAsync(longPrompt);
+        await Page.GetByTestId("submit-btn").ClickAsync();
+
+        // Wait for the UI to resolve
+        await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
+
+        // This assertion intentionally fails — the server returns 413 for >5000 chars
+        // so a normal response is never returned. Test exists to document the known
+        // server limit and generate a trace and screenshot showing the error state.
+        var hasResponse =
+            await response.IsVisibleAsync() &&
+            !string.IsNullOrWhiteSpace(await response.InnerTextAsync());
+
+        hasResponse.Should().BeTrue(
+            because: "documents known limitation: server rejects prompts over 5000 chars " +
+                     "with 413 — remove this test once the limit is raised or removed");
+    }
+
+    [Test]
     [Description("Gibberish input returns a response without crashing the UI")]
     public async Task GibberishPrompt_DoesNotCrashUI()
     {
