@@ -111,7 +111,7 @@ public class EdgeCaseTests : TestBase
         await Page.GetByTestId("submit-btn").ClickAsync();
 
         // Wait for the UI to resolve
-        await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
+       // await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         // This assertion intentionally fails — the server returns 413 for >5000 chars
         // so a normal response is never returned. Test exists to document the known
@@ -119,10 +119,10 @@ public class EdgeCaseTests : TestBase
         var hasResponse =
             await response.IsVisibleAsync() &&
             !string.IsNullOrWhiteSpace(await response.InnerTextAsync());
-//expecting to haave response will cause the test to fail:
-      //  hasResponse.Should().BeTrue(
-       //     because: "documents known limitation: server rejects prompts over 5000 chars " +
-        //             "with 413 — remove this test once the limit is raised or removed");
+//expecting to have response will cause the test to fail:
+        hasResponse.Should().BeTrue(
+            because: "documents known limitation: server rejects prompts over 5000 chars " +
+                     "with 413 — remove this test once the limit is raised or removed");
     }
 
     [Test]
