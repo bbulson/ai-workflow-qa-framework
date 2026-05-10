@@ -101,9 +101,15 @@ public class TestBase : PageTest
         var failed = TestContext.CurrentContext.Result.Outcome.Status ==
                      NUnit.Framework.Interfaces.TestStatus.Failed;
 
-        // Check for the AlwaysTrace category marker
-        var categories = TestContext.CurrentContext.Test.Properties["Category"] as IEnumerable<object>;
-        var alwaysTrace = categories?.Contains("AlwaysTrace") ?? false;
+        // Check for the AlwaysTrace category marker.
+        // Uses Cast<object>() rather than "as IEnumerable<object>" because NUnit
+        // stores Properties["Category"] as an IList of strings internally —
+        // the direct cast returns null on some NUnit versions, making AlwaysTrace
+        // silently never fire.
+        var alwaysTrace = TestContext.CurrentContext.Test.Properties.ContainsKey("Category") &&
+                          TestContext.CurrentContext.Test.Properties["Category"]
+                              .Cast<object>()
+                              .Any(c => c.ToString() == "AlwaysTrace");
 
         var testName = TestContext.CurrentContext.Test.Name;
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
