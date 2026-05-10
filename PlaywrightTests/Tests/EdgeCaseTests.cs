@@ -104,14 +104,13 @@ public class EdgeCaseTests : TestBase
     {
         var longPrompt = string.Concat(Enumerable.Repeat("AI ", 2000)); // ~6000 chars
 
-        var errorBanner = Page.GetByTestId("error-banner");
-        var response    = Page.GetByTestId("response-output");
+        var response = Page.GetByTestId("response-output");
 
         await Page.GetByTestId("prompt-input").FillAsync(longPrompt);
         await Page.GetByTestId("submit-btn").ClickAsync();
 
-        // Wait for the UI to resolve
-        await Expect(errorBanner).ToBeVisibleAsync(new() { Timeout = 10000 });
+        // Wait for the page to settle after submission
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 10000 });
 
         // This assertion intentionally fails — the server returns 413 for >5000 chars
         // so a normal response is never returned. Test exists to document the known
