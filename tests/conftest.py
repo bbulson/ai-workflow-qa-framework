@@ -1,25 +1,48 @@
+"""
+tests/conftest.py  (updated)
+=============================
+Drop-in replacement for the existing conftest.  The only changes:
+
+1. `db_conn` now uses `make_connection()` from db_integrity, which enables
+   WAL journal mode, busy_timeout, and foreign key enforcement — the
+   minimum needed for concurrency-safe tests.
+
+2. Everything else (client fixture, mock_ai_service) is unchanged.
+"""
+
 import pytest
-import requests_mock
+import requests_mock as rm_module
 from framework.api_client import AIClient
 from framework.db import init_db
+from framework.db_integrity import make_connection
 
-#def pytest_sessionstart(session):
-#    init_db()
 
 @pytest.fixture
 def client():
     return AIClient("https://localhost:5000")
 
+
 @pytest.fixture
 def db_conn(tmp_path):
-    db_file = tmp_path / "test.db"
-    conn = init_db(str(db_file))
+    """
+    Provides a WAL-mode SQLite connection with the full schema initialised.
+    Each test gets a clean, isolated database file.
+    """
+    db_file = str(tmp_path / "test.db")
 
+    # init_db creates the schema and returns a plain sqlite3 connection.
+    # Close it and re-open via make_connection to get WAL + busy_timeout.
+    plain_conn = init_db(db_file)
+    plain_conn.close()
+
+    conn = make_connection(db_file)
     yield conn
     conn.close()
+
+
 @pytest.fixture(autouse=True)
 def mock_ai_service():
-    with requests_mock.Mocker() as m:
+    with rm_module.Mocker() as m:
 
         def dynamic_response(request, context):
             data = request.json()
