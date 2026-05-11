@@ -8,9 +8,11 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt /app/
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy mock server code and its HTML template
+# Copy mock server code, templates, and shared framework package
 COPY mock_server/chatbot_mock.py /app/
 COPY mock_server/templates /app/templates/
+COPY framework/ /app/framework/
+RUN mkdir -p /app/data
 
 EXPOSE 5000
 
