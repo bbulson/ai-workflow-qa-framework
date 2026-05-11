@@ -221,16 +221,23 @@ class TestConcurrency:
         """
         integrity_checked_transaction must roll back the entire batch
         when a check fails, leaving the table unchanged.
+
+        seed_orders() calls conn.commit() internally, so we insert the
+        duplicate directly inside the context manager without committing,
+        letting integrity_checked_transaction own the transaction boundary.
         """
-        seed_orders(db_conn, [(9000, 1, 10.0)])   # one clean row
+        seed_orders(db_conn, [(9000, 1, 10.0)])   # one clean row, committed
         assert_row_count(db_conn, "orders", 1)
 
         with pytest.raises(IntegrityError):
             with integrity_checked_transaction(db_conn):
-                # This introduces a duplicate — should trigger rollback
-                seed_orders(db_conn, [(9000, 2, 20.0)])
+                # Insert without committing — context manager owns commit/rollback
+                db_conn.execute(
+                    "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
+                    (9000, 2, 20.0)   # duplicate order_id — triggers rollback
+                )
 
-        # Table must still have only the original 1 row
+        # Rollback must have discarded the duplicate; only the original row remains
         assert_row_count(db_conn, "orders", 1)
 
     def test_simultaneous_readers_dont_block_writer(self, db_path):
@@ -247,7 +254,10 @@ class TestConcurrency:
             )
         """)
         for i in range(50):
-            setup_conn.execute("INSERT INTO orders VALUES (NULL,?,?,?)", (i, 1, 1.0))
+            setup_conn.execute(
+                "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
+                (i, 1, 1.0)
+            )
         setup_conn.commit()
         setup_conn.close()
 
@@ -266,7 +276,10 @@ class TestConcurrency:
         import time
         start = time.perf_counter()
         writer_conn = make_connection(db_path)
-        writer_conn.execute("INSERT INTO orders VALUES (NULL, 9999, 1, 1.0)")
+        writer_conn.execute(
+            "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
+            (9999, 1, 1.0)
+        )
         writer_conn.commit()
         writer_conn.close()
         elapsed = time.perf_counter() - start
