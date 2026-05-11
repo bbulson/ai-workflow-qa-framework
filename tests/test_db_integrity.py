@@ -355,7 +355,7 @@ class TestEndToEnd:
         Assert the row landed in the DB with the correct status.
         """
         conn = make_connection("data/qa_results.db")
-        client.post("/chat", json={"prompt": "end-to-end test prompt"})
+        client.send_prompt("end-to-end test prompt")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="PASS")
         conn.close()
 
@@ -365,7 +365,7 @@ class TestEndToEnd:
         Empty prompt returns 400; mock server should log status=FAIL.
         """
         conn = make_connection("data/qa_results.db")
-        client.post("/chat", json={"prompt": ""})
+        client.send_prompt("")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="FAIL")
         conn.close()
 
@@ -377,7 +377,7 @@ class TestEndToEnd:
         """
         conn = make_connection("data/qa_results.db")
         for i in range(5):
-            client.post("/chat", json={"prompt": f"concurrent prompt {i}"})
+            client.send_prompt(f"concurrent prompt {i}")
         result = validate_db_state(conn, raise_on_failure=False)
         conn.close()
         assert result.ok, f"Integrity failures after live requests:\n{result}"
