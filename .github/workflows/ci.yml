@@ -61,6 +61,11 @@ jobs:
         # RUN mkdir inside the Dockerfile if the host directory is missing.
         mkdir -p data
         chmod 777 data
+        # Pre-initialise the DB schema on the host so the mounted file
+        # already has the test_results table when flask-mock starts.
+        python3 -c "from framework.db import init_db; init_db('data/qa_results.db')"
+        chmod 664 data/qa_results.db
+        chmod 775 data/
 
     # ─────────────────────────────────────────────────────────────────
     # INFRASTRUCTURE — SSL + Docker (both ports 5000 and 5001)
@@ -245,7 +250,7 @@ jobs:
         for f in reports/traces/*.zip; do
           [ -f "$f" ] || continue
           name=$(basename "$f")
-          TRACE_HTML+="<li><a href='traces/$name'>$name</a> &nbsp;<small style='color:#666'>(open with: <code>playwright show-trace $name</code>)</small></li>"
+          TRACE_HTML+="<li><a href='traces/$name'>$name</a> &nbsp;<small style='color:#777'>(open with: <code>playwright show-trace $name</code>)</small></li>"
         done
         if [ -z "$TRACE_HTML" ]; then
           TRACE_HTML="<li>No traces captured (no failures and no AlwaysTrace tests ran).</li>"
@@ -302,7 +307,7 @@ jobs:
 
           <div class="card">
             <h2>Playwright Traces</h2>
-            <p style="color:#666;font-size:13px">Download a trace zip and open it locally with: <code>playwright show-trace &lt;file&gt;.zip</code></p>
+            <p style="color:#777;font-size:13px">Download a trace zip and open it locally with: <code>playwright show-trace &lt;file&gt;.zip</code></p>
             <ul>$TRACE_HTML</ul>
           </div>
 

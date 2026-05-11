@@ -1,18 +1,27 @@
+import os
 import time
 from flask import Flask, request, jsonify, render_template
 from framework.db import init_db, log_test_result
 
 app = Flask(__name__)
 
-# DB connection is initialised lazily on first request rather than at
-# module load time. This prevents a missing or unwritable data/ directory
-# from crashing the Flask process before it can serve any requests.
+# Use an absolute path so the DB location is unambiguous regardless of
+# the working directory Flask starts from inside the container.
+DB_PATH = os.environ.get("QA_DB_PATH", "/app/data/qa_results.db")
+
 _conn = None
+_conn_error = None
+
 
 def get_conn():
-    global _conn
+    global _conn, _conn_error
     if _conn is None:
-        _conn = init_db("data/qa_results.db")
+        try:
+            _conn = init_db(DB_PATH)
+            _conn_error = None
+        except Exception as exc:
+            _conn_error = str(exc)
+            raise
     return _conn
 
 
@@ -41,8 +50,6 @@ def chat():
     latency_ms = (time.perf_counter() - start) * 1000
     status = "PASS" if code == 200 else "FAIL"
 
-    # DB write is best-effort — a logging failure must never affect the
-    # HTTP response that tests are asserting on.
     try:
         log_test_result(
             conn=get_conn(),
@@ -63,6 +70,28 @@ def chat():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/db-status", methods=["GET"])
+def db_status():
+    """Debug endpoint — confirms DB path and connection state."""
+    try:
+        conn = get_conn()
+        row_count = conn.execute("SELECT COUNT(*) FROM test_results").fetchone()[0]
+        return jsonify({
+            "db_path": DB_PATH,
+            "db_exists": os.path.exists(DB_PATH),
+            "connected": True,
+            "test_results_count": row_count,
+            "error": None,
+        })
+    except Exception as exc:
+        return jsonify({
+            "db_path": DB_PATH,
+            "db_exists": os.path.exists(DB_PATH),
+            "connected": False,
+            "error": str(exc),
+        }), 500
 
 
 if __name__ == "__main__":

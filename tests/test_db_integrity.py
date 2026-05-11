@@ -339,6 +339,8 @@ pytest_e2e = pytest.mark.skipif(
 
 
 LIVE_URL = "https://localhost:5000"
+# Path on the host — matches the docker-compose volume mount ./data:/app/data
+HOST_DB_PATH = "data/qa_results.db"
 
 
 def _live_post(prompt: str) -> int:
@@ -353,6 +355,25 @@ def _live_post(prompt: str) -> int:
         verify=False,
     )
     return r.status_code
+
+
+def _assert_container_db_writable():
+    """
+    Hit /db-status on the container and fail fast with a clear message
+    if the container cannot connect to or write to its DB.
+    """
+    try:
+        r = requests.get(f"{LIVE_URL}/db-status", timeout=3, verify=False)
+        body = r.json()
+        if not body.get("connected"):
+            raise IntegrityError(
+                f"Container DB not writable: {body.get('error')} "
+                f"(path: {body.get('db_path')}, exists: {body.get('db_exists')})"
+            )
+    except IntegrityError:
+        raise
+    except Exception as exc:
+        raise IntegrityError(f"/db-status check failed: {exc}")
 
 
 @pytest.mark.e2e
@@ -373,7 +394,8 @@ class TestEndToEnd:
         """
         POST /chat → flask-mock writes a test_result row with status PASS.
         """
-        conn = make_connection("data/qa_results.db")
+        _assert_container_db_writable()
+        conn = make_connection(HOST_DB_PATH)
         _live_post("end-to-end test prompt")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="PASS")
         conn.close()
@@ -383,7 +405,8 @@ class TestEndToEnd:
         """
         Empty prompt → flask-mock returns 400 and logs status FAIL.
         """
-        conn = make_connection("data/qa_results.db")
+        _assert_container_db_writable()
+        conn = make_connection(HOST_DB_PATH)
         _live_post("")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="FAIL")
         conn.close()
@@ -394,7 +417,8 @@ class TestEndToEnd:
         After several live requests, full integrity check must still pass —
         no duplicates, no nulls, no bad amounts introduced by the service.
         """
-        conn = make_connection("data/qa_results.db")
+        _assert_container_db_writable()
+        conn = make_connection(HOST_DB_PATH)
         for i in range(5):
             _live_post(f"concurrent prompt {i}")
         result = validate_db_state(conn, raise_on_failure=False)
