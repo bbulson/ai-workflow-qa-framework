@@ -55,6 +55,12 @@ jobs:
         mkdir -p reports/screenshots
         mkdir -p reports/traces
         mkdir -p reports/jmeter
+        # data/ is mounted into flask-mock via docker-compose volume (./data:/app/data)
+        # and also used directly by pytest for log_test_result writes.
+        # Must exist before Docker starts — the volume mount will shadow the
+        # RUN mkdir inside the Dockerfile if the host directory is missing.
+        mkdir -p data
+        chmod 777 data
 
     # ─────────────────────────────────────────────────────────────────
     # INFRASTRUCTURE — SSL + Docker (both ports 5000 and 5001)
