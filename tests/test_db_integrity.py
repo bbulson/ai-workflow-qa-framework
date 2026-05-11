@@ -308,3 +308,76 @@ class TestExistingBehaviorPreserved:
         duplicates = find_duplicate_order_ids(db_conn)
         assert len(duplicates) > 0
         assert duplicates[0][0] == 1001
+
+
+# ══════════════════════════════════════════════
+# 5. END-TO-END — real HTTP boundary → DB write
+#
+# Requires the stack to be running:
+#   docker compose up --build -d
+#
+# Skipped automatically when the service is not up.
+# Run in CI with: pytest -m e2e
+# ══════════════════════════════════════════════
+
+import requests
+
+
+def _service_available(url: str = "https://localhost:5000/health") -> bool:
+    """Return True only if the live mock server is reachable."""
+    try:
+        r = requests.get(url, timeout=2, verify=False)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+pytest_e2e = pytest.mark.skipif(
+    not _service_available(),
+    reason="flask-mock not running — start with: docker compose up --build -d"
+)
+
+
+@pytest.mark.e2e
+class TestEndToEnd:
+    """
+    Crosses a real service boundary: pytest → HTTP → flask-mock container
+    → DB write → integrity assertion on the shared data/qa_results.db file.
+
+    The docker volume mount (./data:/app/data) makes the container's DB
+    write visible to pytest running on the host.
+    """
+
+    @pytest_e2e
+    def test_chat_request_persisted_to_db(self, client):
+        """
+        POST /chat through nginx → flask-mock writes a test_result row.
+        Assert the row landed in the DB with the correct status.
+        """
+        conn = make_connection("data/qa_results.db")
+        client.post("/chat", json={"prompt": "end-to-end test prompt"})
+        assert_test_result_logged(conn, "chat_endpoint", expected_status="PASS")
+        conn.close()
+
+    @pytest_e2e
+    def test_invalid_prompt_logged_as_fail(self, client):
+        """
+        Empty prompt returns 400; mock server should log status=FAIL.
+        """
+        conn = make_connection("data/qa_results.db")
+        client.post("/chat", json={"prompt": ""})
+        assert_test_result_logged(conn, "chat_endpoint", expected_status="FAIL")
+        conn.close()
+
+    @pytest_e2e
+    def test_db_integrity_holds_after_live_requests(self, client):
+        """
+        After several live requests, full integrity check must still pass —
+        no duplicates, no nulls, no bad amounts introduced by the service.
+        """
+        conn = make_connection("data/qa_results.db")
+        for i in range(5):
+            client.post("/chat", json={"prompt": f"concurrent prompt {i}"})
+        result = validate_db_state(conn, raise_on_failure=False)
+        conn.close()
+        assert result.ok, f"Integrity failures after live requests:\n{result}"

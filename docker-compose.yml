@@ -12,6 +12,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://qauser:qapassword@db:5432/qadb
+    volumes:
+      - ./data:/app/data   # shared with host so pytest can read DB writes
     depends_on:
       - db
     restart: always
