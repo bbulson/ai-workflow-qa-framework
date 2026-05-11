@@ -41,7 +41,13 @@ def db_conn(tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def mock_ai_service():
+def mock_ai_service(request):
+    # e2e tests make real HTTP calls to the live container — requests_mock
+    # must not intercept them. Skip the mock entirely for any test marked e2e.
+    if request.node.get_closest_marker("e2e"):
+        yield None
+        return
+
     with rm_module.Mocker() as m:
 
         def dynamic_response(request, context):
