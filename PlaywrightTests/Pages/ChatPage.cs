@@ -1,4 +1,4 @@
-    using Microsoft.Playwright;
+using Microsoft.Playwright;
 
 namespace PlaywrightTests.Pages;
 
@@ -42,31 +42,35 @@ public class ChatPage
     /// <summary>Types a prompt and submits it, then waits for a response.</summary>
     public async Task<string> SendPromptAsync(string prompt)
     {
+        // Clear any previous response before submitting so the wait below
+        // doesn't return stale content from the last call.
+        await _page.EvaluateAsync("document.getElementById('response-output').textContent = ''");
+
         await PromptInput.FillAsync(prompt);
         await SubmitButton.ClickAsync();
 
-    // Wait for spinner if it appears (CI-safe)
-    if (await LoadingSpinner.IsVisibleAsync())
-    {// before — returns immediately, element always exists
-     //   await LoadingSpinner.WaitForAsync(new LocatorWaitForOptions
-     //   {
-     //       State = WaitForSelectorState.Hidden,
-     //       Timeout = 10_000
-     //   });
-        // after — polls until text is non-empty
+        // Wait for spinner to appear then disappear (CI-safe).
+        // The spinner is only shown while the fetch is in flight so checking
+        // IsVisible immediately after click is reliable.
+        if (await LoadingSpinner.IsVisibleAsync())
+        {
+            await LoadingSpinner.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Hidden,
+                Timeout = 10_000
+            });
+        }
+
+        // #response-output is always attached in the DOM, so waiting for
+        // Attached returns immediately before the fetch completes.
+        // Instead, poll until the element has non-empty text content.
         await _page.WaitForFunctionAsync(
             "() => (document.getElementById('response-output')?.textContent ?? '').trim().length > 0",
-            null,   
+            null,
             new PageWaitForFunctionOptions { Timeout = 10_000 }
         );
-    }
 
-    await ResponseContainer.WaitForAsync(new LocatorWaitForOptions
-    {
-        State = WaitForSelectorState.Attached,
-        Timeout = 10_000
-    });
-    return await ResponseContainer.InnerTextAsync();
+        return await ResponseContainer.InnerTextAsync();
     }
 
     /// <summary>Submits without typing anything - used for empty prompt edge case tests.</summary>

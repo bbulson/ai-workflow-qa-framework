@@ -4,15 +4,23 @@ from framework.db import init_db, log_test_result
 
 app = Flask(__name__)
 
-# Shared DB connection — initialised once on startup.
-# In the container, data/qa_results.db is mounted from the host
-# so pytest and the mock server read from the same file.
-conn = init_db("data/qa_results.db")
+# DB connection is initialised lazily on first request rather than at
+# module load time. This prevents a missing or unwritable data/ directory
+# from crashing the Flask process before it can serve any requests.
+_conn = None
+
+def get_conn():
+    global _conn
+    if _conn is None:
+        _conn = init_db("data/qa_results.db")
+    return _conn
+
 
 # ── UI Route ──────────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
+
 
 # ── API Routes ────────────────────────────────────────────────────
 @app.route("/chat", methods=["POST"])
@@ -33,16 +41,21 @@ def chat():
     latency_ms = (time.perf_counter() - start) * 1000
     status = "PASS" if code == 200 else "FAIL"
 
-    log_test_result(
-        conn=conn,
-        test_name="chat_endpoint",
-        status=status,
-        latency_ms=round(latency_ms, 3),
-        request_payload=data,
-        response_payload=response,
-        response_code=code,
-        environment="docker",
-    )
+    # DB write is best-effort — a logging failure must never affect the
+    # HTTP response that tests are asserting on.
+    try:
+        log_test_result(
+            conn=get_conn(),
+            test_name="chat_endpoint",
+            status=status,
+            latency_ms=round(latency_ms, 3),
+            request_payload=data,
+            response_payload=response,
+            response_code=code,
+            environment="docker",
+        )
+    except Exception as exc:
+        app.logger.warning("DB log failed (non-fatal): %s", exc)
 
     return jsonify(response), code
 
