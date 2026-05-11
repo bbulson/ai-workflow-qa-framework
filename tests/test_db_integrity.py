@@ -338,46 +338,65 @@ pytest_e2e = pytest.mark.skipif(
 )
 
 
+LIVE_URL = "https://localhost:5000"
+
+
+def _live_post(prompt: str) -> int:
+    """
+    POST directly to the running container, bypassing requests_mock.
+    Returns the HTTP status code.
+    """
+    r = requests.post(
+        f"{LIVE_URL}/chat",
+        json={"prompt": prompt},
+        timeout=5,
+        verify=False,
+    )
+    return r.status_code
+
+
 @pytest.mark.e2e
 class TestEndToEnd:
     """
     Crosses a real service boundary: pytest → HTTP → flask-mock container
     → DB write → integrity assertion on the shared data/qa_results.db file.
 
+    Uses direct requests calls (not AIClient) so requests_mock in conftest
+    does not intercept the traffic — the call must reach the live container.
+
     The docker volume mount (./data:/app/data) makes the container's DB
     write visible to pytest running on the host.
     """
 
     @pytest_e2e
-    def test_chat_request_persisted_to_db(self, client):
+    def test_chat_request_persisted_to_db(self):
         """
-        POST /chat through nginx → flask-mock writes a test_result row.
-        Assert the row landed in the DB with the correct status.
+        POST /chat → flask-mock writes a test_result row with status PASS.
         """
         conn = make_connection("data/qa_results.db")
-        client.send_prompt("end-to-end test prompt")
+        _live_post("end-to-end test prompt")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="PASS")
         conn.close()
 
     @pytest_e2e
-    def test_invalid_prompt_logged_as_fail(self, client):
+    def test_invalid_prompt_logged_as_fail(self):
         """
-        Empty prompt returns 400; mock server should log status=FAIL.
+        Empty prompt → flask-mock returns 400 and logs status FAIL.
         """
         conn = make_connection("data/qa_results.db")
-        client.send_prompt("")
+        _live_post("")
         assert_test_result_logged(conn, "chat_endpoint", expected_status="FAIL")
         conn.close()
 
     @pytest_e2e
-    def test_db_integrity_holds_after_live_requests(self, client):
+    def test_db_integrity_holds_after_live_requests(self):
         """
         After several live requests, full integrity check must still pass —
         no duplicates, no nulls, no bad amounts introduced by the service.
         """
         conn = make_connection("data/qa_results.db")
         for i in range(5):
-            client.send_prompt(f"concurrent prompt {i}")
+            _live_post(f"concurrent prompt {i}")
         result = validate_db_state(conn, raise_on_failure=False)
         conn.close()
         assert result.ok, f"Integrity failures after live requests:\n{result}"
