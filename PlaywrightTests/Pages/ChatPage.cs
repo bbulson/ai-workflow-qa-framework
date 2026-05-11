@@ -1,4 +1,4 @@
-using Microsoft.Playwright;
+    using Microsoft.Playwright;
 
 namespace PlaywrightTests.Pages;
 
@@ -47,12 +47,18 @@ public class ChatPage
 
     // Wait for spinner if it appears (CI-safe)
     if (await LoadingSpinner.IsVisibleAsync())
-    {
-        await LoadingSpinner.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = 10_000
-        });
+    {// before — returns immediately, element always exists
+     //   await LoadingSpinner.WaitForAsync(new LocatorWaitForOptions
+     //   {
+     //       State = WaitForSelectorState.Hidden,
+     //       Timeout = 10_000
+     //   });
+        // after — polls until text is non-empty
+        await _page.WaitForFunctionAsync(
+            "() => (document.getElementById('response-output')?.textContent ?? '').trim().length > 0",
+            null,   
+            new PageWaitForFunctionOptions { Timeout = 10_000 }
+        );
     }
 
     await ResponseContainer.WaitForAsync(new LocatorWaitForOptions
