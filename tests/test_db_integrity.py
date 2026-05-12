@@ -410,18 +410,30 @@ class TestEndToEnd:
         import datetime
         _assert_container_db_writable()
         conn = make_connection(HOST_DB_PATH)
-        started_at = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        # Record row count before the post so we can assert a NEW row was added
+        # with the correct status, regardless of timestamp precision.
+        before_count = conn.execute(
+            "SELECT COUNT(*) FROM test_results WHERE test_name = ?",
+            ("chat_endpoint",)
+        ).fetchone()[0]
+
         _live_post("")
+
+        # Wait briefly to ensure the container has committed the write
+        import time as _time
+        _time.sleep(0.3)
+
         rows = conn.execute(
-            "SELECT status FROM test_results "
-            "WHERE test_name = ? AND timestamp >= ? "
-            "ORDER BY timestamp DESC",
-            ("chat_endpoint", started_at)
+            "SELECT status FROM test_results WHERE test_name = ? "
+            "ORDER BY rowid DESC",
+            ("chat_endpoint",)
         ).fetchall()
-        if not rows:
+
+        after_count = len(rows)
+        if after_count <= before_count:
             raise IntegrityError(
-                "No chat_endpoint FAIL row written after test started. "
-                "Was log_test_result() called for the empty prompt?"
+                "No new chat_endpoint row was written after the empty prompt post. "
+                "Was log_test_result() called?"
             )
         assert rows[0]["status"] == "FAIL", (
             f"Expected FAIL for empty prompt, got {rows[0]['status']}"
