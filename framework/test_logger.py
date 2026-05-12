@@ -15,7 +15,9 @@ def log_api_test(test_name, payload, response, start_time):
     except Exception:
         response_json = {"raw": response.text}
 
+#    status = "PASS" if response.status_code == 200 else "FAIL"
     status = "PASS" if response.status_code == 200 else "FAIL"
+    if isinstance(response_json, dict) and "error" in response_json: status = "FAIL"
 
     log_test_result(
         test_name=test_name,
