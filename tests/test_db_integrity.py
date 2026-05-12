@@ -404,11 +404,28 @@ class TestEndToEnd:
     def test_invalid_prompt_logged_as_fail(self):
         """
         Empty prompt → flask-mock returns 400 and logs status FAIL.
+        The assertion queries rows written after this test started so the
+        PASS row from the previous test does not satisfy the check.
         """
+        import datetime
         _assert_container_db_writable()
         conn = make_connection(HOST_DB_PATH)
+        started_at = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         _live_post("")
-        assert_test_result_logged(conn, "chat_endpoint", expected_status="FAIL")
+        rows = conn.execute(
+            "SELECT status FROM test_results "
+            "WHERE test_name = ? AND timestamp >= ? "
+            "ORDER BY timestamp DESC",
+            ("chat_endpoint", started_at)
+        ).fetchall()
+        if not rows:
+            raise IntegrityError(
+                "No chat_endpoint FAIL row written after test started. "
+                "Was log_test_result() called for the empty prompt?"
+            )
+        assert rows[0]["status"] == "FAIL", (
+            f"Expected FAIL for empty prompt, got {rows[0]['status']}"
+        )
         conn.close()
 
     @pytest_e2e
