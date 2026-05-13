@@ -384,7 +384,7 @@ class TestEndToEnd:
         rows = _fetchall(
             conn,
             "SELECT status FROM test_results WHERE test_name = ? "
-            "ORDER BY rowid DESC",
+            "ORDER BY id DESC",
             ("chat_endpoint",)
         )
 
