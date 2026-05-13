@@ -407,6 +407,10 @@ class TestEndToEnd:
         """
         _assert_container_db_writable()
         conn = make_connection(HOST_DB_PATH)
+        # Clear any rows left by earlier unit/integration tests so the
+        # integrity check only sees rows produced by this E2E test.
+        _execute(conn, "DELETE FROM orders")
+        conn.commit()
         for i in range(5):
             _live_post(f"concurrent prompt {i}")
         result = validate_db_state(conn, raise_on_failure=False)

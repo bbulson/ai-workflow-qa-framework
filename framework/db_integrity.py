@@ -102,13 +102,20 @@ def _fetchall(conn, sql: str, params: tuple = ()) -> list:
 
 
 def _fetchone_scalar(conn, sql: str, params: tuple = ()):
-    """Return the first column of the first row (e.g. COUNT(*))."""
+    """Return the first column of the first row (e.g. COUNT(*)).
+
+    psycopg2 with RealDictCursor returns RealDictRow objects (dict-like),
+    so integer indexing fails.  Extract the first value by key instead.
+    """
     if _is_pg(conn):
         pg_sql = sql.replace("?", "%s")
         with conn.cursor() as cur:
             cur.execute(pg_sql, params)
             row = cur.fetchone()
-            return row[0] if row else None
+            if row is None:
+                return None
+            # RealDictRow is dict-like; grab the first value regardless of column name
+            return next(iter(row.values()))
     return conn.execute(sql, params).fetchone()[0]
 
 
