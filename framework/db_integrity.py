@@ -41,13 +41,35 @@ class IntegrityError(AssertionError):
 # Connection factory — WAL mode for concurrency
 # ─────────────────────────────────────────────
 
-def make_connection(db_path: str = ":memory:") -> sqlite3.Connection:
+def make_connection(db_path: str = ":memory:") -> Any:
     """
-    Open a SQLite connection configured for concurrent microservice workloads:
-      - WAL (Write-Ahead Logging) — readers don't block writers
-      - busy_timeout 5 s — retries on lock contention instead of raising
-      - foreign_keys ON  — referential integrity enforced at the DB level
+    Open a database connection configured for concurrent microservice workloads.
+
+    - When DATABASE_URL is set: connects to PostgreSQL, which provides true
+      parallel writers via MVCC — no WAL pragma needed, it's always on.
+    - Otherwise: SQLite with WAL mode + busy_timeout for local/unit-test use.
+
+    Both paths give you non-blocking readers, transactional integrity, and
+    named-column row access.
     """
+    import os
+    database_url = os.environ.get("DATABASE_URL")
+
+    if database_url:
+        try:
+            import psycopg2
+            import psycopg2.extras
+        except ImportError:
+            raise ImportError(
+                "psycopg2-binary is required when DATABASE_URL is set. "
+                "Run: pip install psycopg2-binary"
+            )
+        conn = psycopg2.connect(database_url,
+                                cursor_factory=psycopg2.extras.RealDictCursor)
+        conn.autocommit = False
+        return conn
+
+    # ── SQLite fallback ───────────────────────────────────────────
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")   # ms
@@ -56,52 +78,96 @@ def make_connection(db_path: str = ":memory:") -> sqlite3.Connection:
     return conn
 
 
+
+# ─────────────────────────────────────────────────────────────────
+# DB-agnostic query helpers (SQLite conn.execute vs psycopg2 cursor)
+# ─────────────────────────────────────────────────────────────────
+
+def _is_pg(conn) -> bool:
+    try:
+        import psycopg2.extensions
+        return isinstance(conn, psycopg2.extensions.connection)
+    except ImportError:
+        return False
+
+
+def _fetchall(conn, sql: str, params: tuple = ()) -> list:
+    """Execute sql and return rows as plain dicts for both PG and SQLite."""
+    if _is_pg(conn):
+        pg_sql = sql.replace("?", "%s")
+        with conn.cursor() as cur:
+            cur.execute(pg_sql, params)
+            return [dict(r) for r in cur.fetchall()]
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def _fetchone_scalar(conn, sql: str, params: tuple = ()):
+    """Return the first column of the first row (e.g. COUNT(*))."""
+    if _is_pg(conn):
+        pg_sql = sql.replace("?", "%s")
+        with conn.cursor() as cur:
+            cur.execute(pg_sql, params)
+            row = cur.fetchone()
+            return list(row.values())[0] if row else None
+    return conn.execute(sql, params).fetchone()[0]
+
+
+def _execute(conn, sql: str, params: tuple = ()) -> None:
+    """Execute a DML statement (INSERT/UPDATE/DELETE) on either backend."""
+    if _is_pg(conn):
+        pg_sql = sql.replace("?", "%s")
+        with conn.cursor() as cur:
+            cur.execute(pg_sql, params)
+    else:
+        conn.execute(sql, params)
+
+
 # ─────────────────────────────────────────────────
 # Core integrity checks  (each raises IntegrityError
 # so they fail the pytest test immediately)
 # ─────────────────────────────────────────────────
 
-def assert_no_duplicate_order_ids(conn: sqlite3.Connection) -> None:
+def assert_no_duplicate_order_ids(conn) -> None:
     """Fail if any order_id appears more than once in the orders table."""
-    rows = conn.execute("""
+    rows = _fetchall(conn, """
         SELECT order_id, COUNT(*) AS cnt
         FROM orders
         GROUP BY order_id
-        HAVING cnt > 1
-    """).fetchall()
+        HAVING COUNT(*) > 1
+    """)
     if rows:
         detail = ", ".join(f"order_id={r['order_id']} ({r['cnt']} times)" for r in rows)
         raise IntegrityError(f"Duplicate order_ids detected: {detail}")
 
 
-def assert_no_null_required_fields(conn: sqlite3.Connection) -> None:
+def assert_no_null_required_fields(conn) -> None:
     """Fail if any order is missing order_id, user_id, or amount."""
-    rows = conn.execute("""
+    rows = _fetchall(conn, """
         SELECT id, order_id, user_id, amount
         FROM orders
         WHERE order_id IS NULL
            OR user_id  IS NULL
            OR amount   IS NULL
-    """).fetchall()
+    """)
     if rows:
         ids = [r["id"] for r in rows]
         raise IntegrityError(f"Orders with NULL required fields (row ids): {ids}")
 
 
-def assert_positive_amounts(conn: sqlite3.Connection) -> None:
+def assert_positive_amounts(conn) -> None:
     """Fail if any order has a zero or negative amount — business rule."""
-    rows = conn.execute("""
+    rows = _fetchall(conn, """
         SELECT id, order_id, amount
         FROM orders
         WHERE amount <= 0
-    """).fetchall()
+    """)
     if rows:
         detail = [(r["id"], r["order_id"], r["amount"]) for r in rows]
         raise IntegrityError(f"Orders with non-positive amounts: {detail}")
 
 
 def assert_row_count(
-    conn: sqlite3.Connection,
+    conn,
     table: str,
     expected: int,
     op: str = "=="
@@ -114,7 +180,7 @@ def assert_row_count(
         assert_row_count(conn, "orders", 3)
         assert_row_count(conn, "test_results", 1, ">=")
     """
-    actual = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    actual = _fetchone_scalar(conn, f"SELECT COUNT(*) FROM {table}")
     ops = {"==": actual == expected, ">=": actual >= expected,
            "<=": actual <= expected, ">": actual > expected,
            "<": actual < expected}
@@ -125,7 +191,7 @@ def assert_row_count(
 
 
 def assert_test_result_logged(
-    conn: sqlite3.Connection,
+    conn,
     test_name: str,
     expected_status: str | None = None
 ) -> None:
@@ -133,10 +199,11 @@ def assert_test_result_logged(
     Verify a test result was *actually persisted*, not just logged to stdout.
     Optionally check that its status matches expected_status ('PASS'/'FAIL').
     """
-    rows = conn.execute(
+    rows = _fetchall(
+        conn,
         "SELECT status FROM test_results WHERE test_name = ? ORDER BY timestamp DESC",
         (test_name,)
-    ).fetchall()
+    )
     if not rows:
         raise IntegrityError(
             f"No test_result row found for test '{test_name}'. "
@@ -168,7 +235,7 @@ class ValidationResult:
         return "\n".join(lines)
 
 
-def validate_db_state(conn: sqlite3.Connection, raise_on_failure: bool = True) -> ValidationResult:
+def validate_db_state(conn, raise_on_failure: bool = True) -> ValidationResult:
     """
     Run every integrity check and collect results.
 
@@ -210,21 +277,32 @@ def run_concurrent_inserts(
     Simulate multiple microservice workers writing orders simultaneously.
     Returns a list of any exceptions raised (empty = all succeeded).
 
-    Use in tests to verify WAL mode prevents data loss under concurrency:
+    When DATABASE_URL is set, each worker opens a real PostgreSQL connection,
+    exercising true parallel writers via MVCC (no serialization).
+    In SQLite mode, WAL mode allows concurrent reads while serializing writes.
 
         errors = run_concurrent_inserts("data/qa_results.db", orders, workers=10)
         assert errors == [], f"Concurrent writes failed: {errors}"
     """
+    import os
     errors: list[Exception] = []
     lock = threading.Lock()
+    database_url = os.environ.get("DATABASE_URL")
 
     def worker(batch: list[tuple]) -> None:
         try:
             conn = make_connection(db_path)
-            conn.executemany(
-                "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
-                batch
-            )
+            if _is_pg(conn):
+                with conn.cursor() as cur:
+                    cur.executemany(
+                        "INSERT INTO orders (order_id, user_id, amount) VALUES (%s, %s, %s)",
+                        batch
+                    )
+            else:
+                conn.executemany(
+                    "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
+                    batch
+                )
             conn.commit()
             conn.close()
         except Exception as exc:
@@ -248,7 +326,7 @@ def run_concurrent_inserts(
 # ─────────────────────────────────────────────
 
 @contextmanager
-def integrity_checked_transaction(conn: sqlite3.Connection):
+def integrity_checked_transaction(conn):
     """
     Wraps a block of DB writes in a transaction and runs all integrity
     checks on commit.  Rolls back automatically if checks fail.

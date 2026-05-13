@@ -6,3 +6,4 @@ requests-mock
 gunicorn
 pyOpenSSL
 
+psycopg2-binary

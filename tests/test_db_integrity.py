@@ -26,66 +26,15 @@ from framework.db_integrity import (
     run_concurrent_inserts,
     integrity_checked_transaction,
     make_connection,
+    _fetchone_scalar,
 )
 
 
 # ──────────────────────────────────────────────
 # Fixtures
 # ──────────────────────────────────────────────
-
-@pytest.fixture
-def db_conn(tmp_path):
-    """Fresh in-process DB for every test — WAL mode enabled."""
-    db_file = str(tmp_path / "test.db")
-    conn = make_connection(db_file)           # WAL + busy_timeout + FK
-    init_db.__wrapped__(conn) if hasattr(init_db, "__wrapped__") else None
-
-    # Ensure tables exist (init_db accepts a path, so open a second conn
-    # to create schema, then hand back our WAL conn)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            order_id INTEGER,
-            user_id  INTEGER,
-            amount   REAL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS test_results (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            test_name        TEXT,
-            status           TEXT,
-            latency_ms       REAL,
-            request_payload  TEXT,
-            response_payload TEXT,
-            response_code    INTEGER,
-            environment      TEXT,
-            timestamp        DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    yield conn
-    conn.close()
-
-
-@pytest.fixture
-def db_path(tmp_path):
-    """Path to an on-disk DB for concurrency tests."""
-    path = str(tmp_path / "concurrent.db")
-    conn = make_connection(path)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            order_id INTEGER,
-            user_id  INTEGER,
-            amount   REAL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-    return path
+# db_conn and db_path are defined in conftest.py and work for both
+# PostgreSQL (DATABASE_URL set) and SQLite (local dev).
 
 
 # ══════════════════════════════════════════════
@@ -121,25 +70,41 @@ class TestPersistence:
         clear_orders(db_conn)
         assert_row_count(db_conn, "orders", 0)
 
-    def test_data_survives_reconnect(self, tmp_path):
-        """Simulate a service restart — data must survive across connections."""
-        db_file = str(tmp_path / "persist.db")
+    def test_data_survives_reconnect(self, db_conn, tmp_path):
+        """
+        Simulate a service restart — data must survive across connections.
 
-        conn1 = make_connection(db_file)
-        conn1.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER, user_id INTEGER, amount REAL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        seed_orders(conn1, [(99, 1, 999.0)])
-        conn1.close()
+        PostgreSQL: two successive connections to the same server both see
+        the committed row (MVCC snapshot isolation, not in-memory only).
+        SQLite: same test against an on-disk file, as before.
+        """
+        from framework.db_integrity import _is_pg
+        from framework.db_utils import seed_orders as _seed
 
-        conn2 = make_connection(db_file)
-        count = conn2.execute("SELECT COUNT(*) FROM orders WHERE order_id=99").fetchone()[0]
-        conn2.close()
-        assert count == 1, "Row was lost after reconnect — persistence failure"
+        if _is_pg(db_conn):
+            # Write via db_conn, read back via a fresh independent connection
+            _seed(db_conn, [(99, 1, 999.0)])
+            conn2 = make_connection()
+            count = _fetchone_scalar(conn2, "SELECT COUNT(*) FROM orders WHERE order_id=99")
+            conn2.close()
+            assert count == 1, "Row lost after reconnect (Postgres) — persistence failure"
+        else:
+            db_file = str(tmp_path / "persist.db")
+            conn1 = make_connection(db_file)
+            conn1.execute("""
+                CREATE TABLE IF NOT EXISTS orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id INTEGER, user_id INTEGER, amount REAL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            _seed(conn1, [(99, 1, 999.0)])
+            conn1.close()
+
+            conn2 = make_connection(db_file)
+            count = conn2.execute("SELECT COUNT(*) FROM orders WHERE order_id=99").fetchone()[0]
+            conn2.close()
+            assert count == 1, "Row lost after reconnect (SQLite) — persistence failure"
 
 
 # ══════════════════════════════════════════════
@@ -307,7 +272,7 @@ class TestExistingBehaviorPreserved:
         seed_orders(db_conn, [(1001, 1, 50.0), (1001, 2, 75.0), (1002, 3, 20.0)])
         duplicates = find_duplicate_order_ids(db_conn)
         assert len(duplicates) > 0
-        assert duplicates[0][0] == 1001
+        assert duplicates[0]["order_id"] == 1001
 
 
 # ══════════════════════════════════════════════
