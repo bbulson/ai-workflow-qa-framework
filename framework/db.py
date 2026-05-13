@@ -31,7 +31,9 @@ def init_db(db_path="data/qa_results.db"):
     - Otherwise: falls back to SQLite with WAL mode for local development.
     """
     if DATABASE_URL:
-        conn = psycopg2.connect(DATABASE_URL)
+        import psycopg2.extras
+        conn = psycopg2.connect(DATABASE_URL,
+                                cursor_factory=psycopg2.extras.RealDictCursor)
         conn.autocommit = False
         cur = conn.cursor()
         cur.execute("""
