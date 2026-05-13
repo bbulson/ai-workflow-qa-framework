@@ -108,7 +108,7 @@ def _fetchone_scalar(conn, sql: str, params: tuple = ()):
         with conn.cursor() as cur:
             cur.execute(pg_sql, params)
             row = cur.fetchone()
-            return list(row.values())[0] if row else None
+            return row[0] if row else None
     return conn.execute(sql, params).fetchone()[0]
 
 
