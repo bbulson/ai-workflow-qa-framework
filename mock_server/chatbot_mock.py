@@ -2,6 +2,7 @@ import os
 import time
 from flask import Flask, request, jsonify, render_template
 from framework.db import init_db, log_test_result
+from framework.db_integrity import _fetchone_scalar
 
 app = Flask(__name__)
 
@@ -77,7 +78,7 @@ def db_status():
     """Debug endpoint — confirms DB path and connection state."""
     try:
         conn = get_conn()
-        row_count = conn.execute("SELECT COUNT(*) FROM test_results").fetchone()[0]
+        row_count = _fetchone_scalar(conn, "SELECT COUNT(*) FROM test_results")
         return jsonify({
             "db_path": DB_PATH,
             "db_exists": os.path.exists(DB_PATH),

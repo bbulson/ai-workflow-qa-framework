@@ -27,6 +27,8 @@ from framework.db_integrity import (
     integrity_checked_transaction,
     make_connection,
     _fetchone_scalar,
+    _fetchall,
+    _execute,
 )
 
 
@@ -123,7 +125,7 @@ class TestIntegrityRules:
         assert_no_duplicate_order_ids(db_conn)   # must not raise
 
     def test_null_order_id_detected(self, db_conn):
-        db_conn.execute("INSERT INTO orders (order_id, user_id, amount) VALUES (NULL, 1, 10.0)")
+        _execute(db_conn, "INSERT INTO orders (order_id, user_id, amount) VALUES (NULL, 1, 10.0)")
         db_conn.commit()
         with pytest.raises(IntegrityError, match="NULL required fields"):
             assert_no_null_required_fields(db_conn)
@@ -175,7 +177,7 @@ class TestConcurrency:
 
         conn = make_connection(db_path)
         saved_ids = {
-            r[0] for r in conn.execute("SELECT order_id FROM orders").fetchall()
+            r["order_id"] for r in _fetchall(conn, "SELECT order_id FROM orders")
         }
         expected_ids = {o[0] for o in orders}
         missing = expected_ids - saved_ids
@@ -197,7 +199,7 @@ class TestConcurrency:
         with pytest.raises(IntegrityError):
             with integrity_checked_transaction(db_conn):
                 # Insert without committing — context manager owns commit/rollback
-                db_conn.execute(
+                _execute(db_conn,
                     "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
                     (9000, 2, 20.0)   # duplicate order_id — triggers rollback
                 )
@@ -211,19 +213,9 @@ class TestConcurrency:
         Start 3 reader threads; writer must complete within 2 s.
         """
         setup_conn = make_connection(db_path)
-        setup_conn.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER, user_id INTEGER, amount REAL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        for i in range(50):
-            setup_conn.execute(
-                "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
-                (i, 1, 1.0)
-            )
-        setup_conn.commit()
+        seed_batch = [(i, 1, 1.0) for i in range(50)]
+        from framework.db_utils import seed_orders as _seed
+        _seed(setup_conn, seed_batch)
         setup_conn.close()
 
         stop_flag = threading.Event()
@@ -231,7 +223,7 @@ class TestConcurrency:
         def keep_reading():
             conn = make_connection(db_path)
             while not stop_flag.is_set():
-                conn.execute("SELECT COUNT(*) FROM orders").fetchone()
+                _fetchone_scalar(conn, "SELECT COUNT(*) FROM orders")
             conn.close()
 
         readers = [threading.Thread(target=keep_reading) for _ in range(3)]
@@ -241,7 +233,7 @@ class TestConcurrency:
         import time
         start = time.perf_counter()
         writer_conn = make_connection(db_path)
-        writer_conn.execute(
+        _execute(writer_conn,
             "INSERT INTO orders (order_id, user_id, amount) VALUES (?, ?, ?)",
             (9999, 1, 1.0)
         )
@@ -377,10 +369,11 @@ class TestEndToEnd:
         conn = make_connection(HOST_DB_PATH)
         # Record row count before the post so we can assert a NEW row was added
         # with the correct status, regardless of timestamp precision.
-        before_count = conn.execute(
+        before_count = _fetchone_scalar(
+            conn,
             "SELECT COUNT(*) FROM test_results WHERE test_name = ?",
             ("chat_endpoint",)
-        ).fetchone()[0]
+        )
 
         _live_post("")
 
@@ -388,11 +381,12 @@ class TestEndToEnd:
         import time as _time
         _time.sleep(0.3)
 
-        rows = conn.execute(
+        rows = _fetchall(
+            conn,
             "SELECT status FROM test_results WHERE test_name = ? "
             "ORDER BY rowid DESC",
             ("chat_endpoint",)
-        ).fetchall()
+        )
 
         after_count = len(rows)
         if after_count <= before_count:

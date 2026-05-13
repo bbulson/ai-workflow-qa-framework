@@ -23,4 +23,4 @@ def test_detect_duplicate_order_ids(db_conn):
 
     # Assert: duplicates should be detected
     assert len(duplicates) > 0
-    assert duplicates[0][0] == 1001
+    assert duplicates[0]["order_id"] == 1001
