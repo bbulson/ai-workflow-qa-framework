@@ -547,3 +547,55 @@ class TestEndToEnd:
         result = validate_db_state(conn, raise_on_failure=False)
         conn.close()
         assert result.ok, f"Integrity failures after live requests:\n{result}"
+
+    @pytest_e2e
+    def test_cross_node_data_consistency(self):
+        """
+        Verify data written by one node is immediately visible to another.
+
+        Sends 10 requests through nginx, which round-robins across flask-mock
+        and flask-mock-2.  Because both nodes share the same Postgres instance,
+        every committed row must be visible regardless of which node handled
+        the write.  A failure here means the nodes are not sharing state
+        correctly — the core distributed-node integrity guarantee.
+        """
+        import time
+        _assert_container_db_writable()
+        conn = make_connection(HOST_DB_PATH)
+
+        # Baseline — capture row count before this test's writes
+        before = _fetchone_scalar(
+            conn,
+            "SELECT COUNT(*) FROM test_results"
+        )
+
+        # Fire 10 requests — nginx distributes these across both nodes
+        for i in range(10):
+            _live_post(f"cross-node probe {i}")
+
+        # Brief settle to ensure all commits are visible
+        time.sleep(0.5)
+
+        after = _fetchone_scalar(
+            conn,
+            "SELECT COUNT(*) FROM test_results"
+        )
+        new_rows = after - before
+
+        log.info(
+            "cross_node_consistency | requests=10 | new_rows=%d | %s",
+            new_rows,
+            "PASS" if new_rows == 10 else "FAIL"
+        )
+
+        assert new_rows == 10, (
+            f"Cross-node consistency failure: sent 10 requests across 2 nodes "
+            f"but only {new_rows} rows landed in Postgres. "
+            f"Data written by one node was not visible to the shared DB."
+        )
+
+        # Full integrity check across all rows — no duplicates or corrupt data
+        # introduced by concurrent multi-node writes
+        result = validate_db_state(conn, raise_on_failure=False)
+        conn.close()
+        assert result.ok, f"Integrity failures after cross-node writes:\n{result}"

@@ -1,7 +1,10 @@
 services:
 
-  # ── Mock server ─────────────────────────────────────────────────
-  # Targets: pytest functional tests + C# Playwright UI/API tests
+  # ── Mock server (2 replicas) ────────────────────────────────────
+  # Two nodes sit behind nginx, which round-robins requests across them.
+  # Both write to the same Postgres instance — E2E tests verify that data
+  # committed by one node is immediately visible from the other, confirming
+  # cross-node persistence and integrity under concurrent load.
   # Accessible via nginx on https://localhost:5000 (→ port 443)
   flask-mock:
     build:
@@ -17,6 +20,22 @@ services:
     depends_on:
       db:
         condition: service_healthy   # wait for Postgres to be ready
+    restart: always
+
+  flask-mock-2:
+    build:
+      context: .
+      dockerfile: mock_server/Dockerfile
+    expose:
+      - "5000"
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://qauser:qapassword@db:5432/qadb
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
 
   # ── Local AI server ─────────────────────────────────────────────
