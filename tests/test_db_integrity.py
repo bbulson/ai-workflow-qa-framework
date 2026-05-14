@@ -249,7 +249,117 @@ class TestConcurrency:
 
 
 # ══════════════════════════════════════════════
-# 4. REGRESSION — guard existing test_orders_validation behavior
+# 4. PERFORMANCE SLA — time-bound concurrency checks
+# ══════════════════════════════════════════════
+
+class TestPerformanceSLA:
+    """
+    Benchmark concurrent write workloads against defined SLA thresholds.
+
+    These tests assert that the database layer meets latency and throughput
+    targets under the same parallel-insert pressure used in production-like
+    agentic workflows.  A failure here signals infrastructure regression,
+    not a logic bug.
+
+    SLA targets (conservative for CI runners — tighten for dedicated hardware):
+      - 100 inserts across 10 workers must complete in < 5 s
+      - Mean per-insert latency must stay below 50 ms
+      - Write throughput must exceed 20 rows/sec
+    """
+
+    MAX_TOTAL_SECONDS   = 5.0    # wall-clock budget for the full batch
+    MAX_MEAN_LATENCY_MS = 200.0  # average time per committed row (CI-safe; tighten on dedicated hardware)
+    MIN_ROWS_PER_SECOND = 20.0   # minimum acceptable write throughput
+
+    def test_concurrent_inserts_complete_within_sla(self, db_path):
+        """
+        100 rows across 10 workers must land within the wall-clock SLA.
+        Measures end-to-end time including connection overhead and commit.
+        """
+        import time
+        orders = [(i, i % 5, float(i * 10)) for i in range(300, 400)]
+
+        start = time.perf_counter()
+        errors = run_concurrent_inserts(db_path, orders, workers=10)
+        elapsed = time.perf_counter() - start
+
+        assert errors == [], f"Insert errors during SLA test: {errors}"
+        assert elapsed < self.MAX_TOTAL_SECONDS, (
+            f"SLA breach: {elapsed:.2f}s exceeded {self.MAX_TOTAL_SECONDS}s "
+            f"threshold for 100 concurrent inserts"
+        )
+
+    def test_mean_insert_latency_within_sla(self, db_path):
+        """
+        Mean per-insert latency must stay below MAX_MEAN_LATENCY_MS.
+        Each worker times its own insert individually so outliers are visible.
+        """
+        import time
+        import threading
+
+        orders = [(i, i % 5, float(i)) for i in range(400, 450)]
+        latencies: list = []
+        lock = threading.Lock()
+        errors: list = []
+
+        def timed_insert(order):
+            try:
+                conn = make_connection(db_path)
+                t0 = time.perf_counter()
+                _execute(conn,
+                    "INSERT INTO orders (order_id, user_id, amount) "
+                    "VALUES (?, ?, ?)",
+                    order
+                )
+                conn.commit()
+                ms = (time.perf_counter() - t0) * 1000
+                conn.close()
+                with lock:
+                    latencies.append(ms)
+            except Exception as exc:
+                with lock:
+                    errors.append(str(exc))
+
+        threads = [threading.Thread(target=timed_insert, args=(o,)) for o in orders]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Insert errors during latency test: {errors}"
+        assert latencies, "No latency samples recorded"
+
+        mean_ms = sum(latencies) / len(latencies)
+        assert mean_ms < self.MAX_MEAN_LATENCY_MS, (
+            f"Mean insert latency {mean_ms:.2f}ms exceeds "
+            f"{self.MAX_MEAN_LATENCY_MS}ms SLA "
+            f"(min={min(latencies):.2f}ms, max={max(latencies):.2f}ms)"
+        )
+
+    def test_write_throughput_meets_sla(self, db_path):
+        """
+        Write throughput must exceed MIN_ROWS_PER_SECOND.
+        Calculated as rows_committed / wall_clock_seconds.
+        """
+        import time
+        orders = [(i, i % 5, float(i)) for i in range(500, 550)]
+
+        start  = time.perf_counter()
+        errors = run_concurrent_inserts(db_path, orders, workers=5)
+        elapsed = time.perf_counter() - start
+
+        assert errors == [], f"Insert errors during throughput test: {errors}"
+
+        rows_per_sec = len(orders) / elapsed
+        assert rows_per_sec >= self.MIN_ROWS_PER_SECOND, (
+            f"Write throughput {rows_per_sec:.1f} rows/s fell below "
+            f"{self.MIN_ROWS_PER_SECOND} rows/s SLA "
+            f"({len(orders)} rows in {elapsed:.2f}s)"
+        )
+
+
+# ══════════════════════════════════════════════
+# 5. REGRESSION — guard existing test_orders_validation behavior
 # ══════════════════════════════════════════════
 
 class TestExistingBehaviorPreserved:
