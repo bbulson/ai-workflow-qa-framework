@@ -551,13 +551,15 @@ class TestEndToEnd:
     @pytest_e2e
     def test_cross_node_data_consistency(self):
         """
-        Verify data written by one node is immediately visible to another.
+        Verify data written by one node is immediately visible to another,
+        and that both nodes actually participated in handling requests.
 
-        Sends 10 requests through nginx, which round-robins across flask-mock
-        and flask-mock-2.  Because both nodes share the same Postgres instance,
-        every committed row must be visible regardless of which node handled
-        the write.  A failure here means the nodes are not sharing state
-        correctly — the core distributed-node integrity guarantee.
+        Sends 20 requests through nginx, which round-robins across flask-mock
+        and flask-mock-2.  Each node stamps its hostname into the
+        'environment' column of every row it writes.  The test asserts:
+          1. All 20 rows landed in Postgres (no data loss across nodes).
+          2. Both node hostnames appear in the written rows (distribution proven).
+          3. Full integrity check passes across all rows (no corruption).
         """
         import time
         _assert_container_db_writable()
@@ -569,8 +571,8 @@ class TestEndToEnd:
             "SELECT COUNT(*) FROM test_results"
         )
 
-        # Fire 10 requests — nginx distributes these across both nodes
-        for i in range(10):
+        # Fire 20 requests — nginx round-robins across both nodes
+        for i in range(20):
             _live_post(f"cross-node probe {i}")
 
         # Brief settle to ensure all commits are visible
@@ -582,16 +584,29 @@ class TestEndToEnd:
         )
         new_rows = after - before
 
+        # Find which nodes handled these writes via the environment column
+        node_rows = _fetchall(
+            conn,
+            "SELECT DISTINCT environment FROM test_results ORDER BY environment"
+        )
+        nodes_seen = [r["environment"] for r in node_rows if r["environment"]]
+
         log.info(
-            "cross_node_consistency | requests=10 | new_rows=%d | %s",
+            "cross_node_consistency | requests=20 | new_rows=%d | nodes=%s | %s",
             new_rows,
-            "PASS" if new_rows == 10 else "FAIL"
+            ", ".join(nodes_seen),
+            "PASS" if new_rows == 20 and len(nodes_seen) >= 2 else "FAIL"
         )
 
-        assert new_rows == 10, (
-            f"Cross-node consistency failure: sent 10 requests across 2 nodes "
-            f"but only {new_rows} rows landed in Postgres. "
-            f"Data written by one node was not visible to the shared DB."
+        assert new_rows == 20, (
+            f"Cross-node data loss: sent 20 requests across 2 nodes "
+            f"but only {new_rows} rows landed in Postgres."
+        )
+
+        assert len(nodes_seen) >= 2, (
+            f"Distribution not proven: expected rows from at least 2 nodes "
+            f"but only saw: {nodes_seen}. "
+            f"nginx may not be load balancing correctly."
         )
 
         # Full integrity check across all rows — no duplicates or corrupt data

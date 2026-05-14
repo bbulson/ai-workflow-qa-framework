@@ -1,10 +1,15 @@
 import os
+import socket
 import time
 from flask import Flask, request, jsonify, render_template
 from framework.db import init_db, log_test_result
 from framework.db_integrity import _fetchone_scalar
 
 app = Flask(__name__)
+
+# Each container gets a unique hostname from Docker (service name or ID).
+# Stored on every DB row so tests can verify which node handled each write.
+NODE_ID = socket.gethostname()
 
 # Use an absolute path so the DB location is unambiguous regardless of
 # the working directory Flask starts from inside the container.
@@ -60,7 +65,7 @@ def chat():
             request_payload=data,
             response_payload=response,
             response_code=code,
-            environment="docker",
+            environment=NODE_ID,
         )
     except Exception as exc:
         app.logger.warning("DB log failed (non-fatal): %s", exc)
