@@ -9,9 +9,12 @@ Run:
     pytest tests/test_db_integrity.py -v
 """
 
+import logging
 import os
 import threading
 import pytest
+
+log = logging.getLogger("framework.test_logger")
 
 from framework.db import init_db, log_test_result
 from framework.db_utils import seed_orders, clear_orders, find_duplicate_order_ids
@@ -284,6 +287,12 @@ class TestPerformanceSLA:
         elapsed = time.perf_counter() - start
 
         assert errors == [], f"Insert errors during SLA test: {errors}"
+        log.info(
+            "SLA | concurrent_inserts | rows=100 workers=10 | "
+            "elapsed=%.3fs threshold=%.1fs | %s",
+            elapsed, self.MAX_TOTAL_SECONDS,
+            "PASS" if elapsed < self.MAX_TOTAL_SECONDS else "FAIL"
+        )
         assert elapsed < self.MAX_TOTAL_SECONDS, (
             f"SLA breach: {elapsed:.2f}s exceeded {self.MAX_TOTAL_SECONDS}s "
             f"threshold for 100 concurrent inserts"
@@ -330,6 +339,12 @@ class TestPerformanceSLA:
         assert latencies, "No latency samples recorded"
 
         mean_ms = sum(latencies) / len(latencies)
+        log.info(
+            "SLA | mean_insert_latency | rows=%d | mean=%.2fms min=%.2fms max=%.2fms threshold=%.0fms | %s",
+            len(latencies), mean_ms, min(latencies), max(latencies),
+            self.MAX_MEAN_LATENCY_MS,
+            "PASS" if mean_ms < self.MAX_MEAN_LATENCY_MS else "FAIL"
+        )
         assert mean_ms < self.MAX_MEAN_LATENCY_MS, (
             f"Mean insert latency {mean_ms:.2f}ms exceeds "
             f"{self.MAX_MEAN_LATENCY_MS}ms SLA "
@@ -351,6 +366,12 @@ class TestPerformanceSLA:
         assert errors == [], f"Insert errors during throughput test: {errors}"
 
         rows_per_sec = len(orders) / elapsed
+        log.info(
+            "SLA | write_throughput | rows=%d workers=5 | "
+            "elapsed=%.3fs throughput=%.1f rows/s threshold=%.0f rows/s | %s",
+            len(orders), elapsed, rows_per_sec, self.MIN_ROWS_PER_SECOND,
+            "PASS" if rows_per_sec >= self.MIN_ROWS_PER_SECOND else "FAIL"
+        )
         assert rows_per_sec >= self.MIN_ROWS_PER_SECOND, (
             f"Write throughput {rows_per_sec:.1f} rows/s fell below "
             f"{self.MIN_ROWS_PER_SECOND} rows/s SLA "
