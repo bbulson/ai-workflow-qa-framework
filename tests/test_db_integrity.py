@@ -565,10 +565,11 @@ class TestEndToEnd:
         _assert_container_db_writable()
         conn = make_connection(HOST_DB_PATH)
 
-        # Baseline — capture row count before this test's writes
-        before = _fetchone_scalar(
+        # Baseline — capture the highest id before this test's writes so the
+        # per-node GROUP BY can be scoped to only rows written during this test.
+        before_id = _fetchone_scalar(
             conn,
-            "SELECT COUNT(*) FROM test_results"
+            "SELECT COALESCE(MAX(id), 0) FROM test_results"
         )
 
         # Fire 20 requests — nginx round-robins across both nodes
@@ -578,18 +579,19 @@ class TestEndToEnd:
         # Brief settle to ensure all commits are visible
         time.sleep(0.5)
 
-        after = _fetchone_scalar(
+        new_rows = _fetchone_scalar(
             conn,
-            "SELECT COUNT(*) FROM test_results"
+            "SELECT COUNT(*) FROM test_results WHERE id > ?",
+            (before_id,)
         )
-        new_rows = after - before
 
-        # Count rows per node via the environment (hostname) column
+        # Count rows per node — scoped to only rows written during this test
         node_rows = _fetchall(
             conn,
             "SELECT environment, COUNT(*) as cnt FROM test_results "
-            "WHERE environment IS NOT NULL "
-            "GROUP BY environment ORDER BY environment"
+            "WHERE id > ? AND environment IS NOT NULL "
+            "GROUP BY environment ORDER BY environment",
+            (before_id,)
         )
         node_counts = {r["environment"]: r["cnt"] for r in node_rows if r["environment"]}
         nodes_seen  = list(node_counts.keys())
