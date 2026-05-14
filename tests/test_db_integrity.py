@@ -584,17 +584,21 @@ class TestEndToEnd:
         )
         new_rows = after - before
 
-        # Find which nodes handled these writes via the environment column
+        # Count rows per node via the environment (hostname) column
         node_rows = _fetchall(
             conn,
-            "SELECT DISTINCT environment FROM test_results ORDER BY environment"
+            "SELECT environment, COUNT(*) as cnt FROM test_results "
+            "WHERE environment IS NOT NULL "
+            "GROUP BY environment ORDER BY environment"
         )
-        nodes_seen = [r["environment"] for r in node_rows if r["environment"]]
+        node_counts = {r["environment"]: r["cnt"] for r in node_rows if r["environment"]}
+        nodes_seen  = list(node_counts.keys())
+        node_summary = ", ".join(f"{n}={c}" for n, c in node_counts.items())
 
         log.info(
             "cross_node_consistency | requests=20 | new_rows=%d | nodes=%s | %s",
             new_rows,
-            ", ".join(nodes_seen),
+            node_summary,
             "PASS" if new_rows == 20 and len(nodes_seen) >= 2 else "FAIL"
         )
 
@@ -605,7 +609,7 @@ class TestEndToEnd:
 
         assert len(nodes_seen) >= 2, (
             f"Distribution not proven: expected rows from at least 2 nodes "
-            f"but only saw: {nodes_seen}. "
+            f"but only saw: {node_summary}. "
             f"nginx may not be load balancing correctly."
         )
 

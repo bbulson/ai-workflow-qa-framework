@@ -3,8 +3,8 @@
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="AI Chat API Load Test" enabled="true">
       <stringProp name="TestPlan.comments">
-Performance test simulating concurrent AI chatbot users.
-Thread Group 1: Normal load baseline (5 concurrent users, CSV prompts).
+Performance test simulating concurrent AI chatbot users across 2 flask-mock nodes via nginx.
+Thread Group 1: 10k request load test — 50 threads x 200 iterations. SLA: p95 &lt; 500ms, error rate &lt; 1%.
 Thread Group 2: Payload boundary correctness (3 sequential requests - under/at/over limit).
 Groups run in parallel. Review reports separately to keep baseline metrics clean.
 </stringProp>
@@ -26,19 +26,18 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
       <hashTree/>
 
       <!-- ═══════════════════════════════════════════════════════
-           THREAD GROUP 1: Normal Load Baseline
-           5 concurrent users, 60s duration, CSV-driven prompts.
-           Metrics here represent real-world performance baseline.
+           THREAD GROUP 1: 10k Request Load Test
+           50 concurrent threads × 200 iterations = 10,000 requests.
+           Iteration-based (not duration) so the count is exact and
+           assertable. Error rate SLA: < 1%. Throughput SLA: > 200 rps.
            ═══════════════════════════════════════════════════════ -->
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent AI Users - Normal Load" enabled="true">
-        <intProp name="ThreadGroup.num_threads">5</intProp>
-        <intProp name="ThreadGroup.ramp_time">5</intProp>
-        <longProp name="ThreadGroup.duration">60</longProp>
-        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
-        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent AI Users - 10k Load Test" enabled="true">
+        <intProp name="ThreadGroup.num_threads">50</intProp>
+        <intProp name="ThreadGroup.ramp_time">10</intProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController">
-          <intProp name="LoopController.loops">-1</intProp>
+          <intProp name="LoopController.loops">200</intProp>
           <boolProp name="LoopController.continue_forever">false</boolProp>
         </elementProp>
       </ThreadGroup>
@@ -64,10 +63,7 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
           </collectionProp>
         </HeaderManager>
         <hashTree/>
-        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="User Think Time" enabled="true">
-          <stringProp name="ConstantTimer.delay">300</stringProp>
-        </ConstantTimer>
-        <hashTree/>
+        <!-- Think time removed for 10k throughput test — measuring raw capacity -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
           <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
           <stringProp name="HTTPSampler.port">${__P(port,5001)}</stringProp>
@@ -86,6 +82,7 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
           </elementProp>
         </HTTPSamplerProxy>
         <hashTree>
+          <!-- Assert response contains 'response' key -->
           <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Validate JSON Response" enabled="true">
             <collectionProp name="Asserion.test_strings">
               <stringProp name="-340323263">response</stringProp>
@@ -95,6 +92,11 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
             <stringProp name="Assertion.custom_message"></stringProp>
             <boolProp name="Assertion.assume_success">false</boolProp>
           </ResponseAssertion>
+          <hashTree/>
+          <!-- SLA: p95 response time must be under 500ms -->
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="SLA: Response time under 500ms" enabled="true">
+            <longProp name="DurationAssertion.duration">500</longProp>
+          </DurationAssertion>
           <hashTree/>
         </hashTree>
         <ResultCollector guiclass="SimpleDataWriter" testclass="ResultCollector" testname="Request Response Trace" enabled="true">
