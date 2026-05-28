@@ -143,6 +143,10 @@ jobs:
         CHAT_API_URL: https://localhost:5000
         ORDER_API_URL: http://localhost:5002
       run: |
+        export DATABASE_URL="postgresql://qauser:qapassword@localhost:5432/qadb"
+        export ORDER_DB_URL="postgresql://qauser:qapassword@localhost:5433/orderdb"
+        export CHAT_API_URL="https://localhost:5000"
+        export ORDER_API_URL="http://localhost:5002"
         pytest tests/test_cross_service_integrity.py \
           -v -s -m e2e \
           --html=reports/cross-service-report.html \

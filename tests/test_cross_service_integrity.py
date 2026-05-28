@@ -40,7 +40,7 @@ import psycopg2.extras
 # ── Connection helpers ────────────────────────────────────────────
 
 CHAT_DB_URL   = os.environ.get("DATABASE_URL",  "postgresql://qauser:qapassword@localhost:5432/qadb")
-ORDER_DB_URL  = os.environ.get("ORDER_DB_URL",  "postgresql://qauser:qapassword@localhost:5432/orderdb")
+ORDER_DB_URL  = os.environ.get("ORDER_DB_URL",  "postgresql://qauser:qapassword@localhost:5433/orderdb")
 CHAT_API_URL  = os.environ.get("CHAT_API_URL",  "https://localhost:5000")
 ORDER_API_URL = os.environ.get("ORDER_API_URL", "http://localhost:5002")
 
