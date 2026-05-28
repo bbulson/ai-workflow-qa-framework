@@ -40,8 +40,8 @@ It focuses on API-level validation, browser-driven UI testing, structured loggin
 | **Test Runner (UI)** | Playwright for .NET with NUnit 4 and FluentAssertions |
 | **Load Testing** | Apache JMeter 5.6.3 (cached in CI, locally executable) |
 | **Mocking** | `requests-mock` (unit/integration) + Flask mock server with Postgres backend (E2E) |
-| **Database** | SQLite (local dev) / PostgreSQL 16 (Docker & CI) |
-| **Infrastructure** | Docker Compose — two Flask replicas, Nginx reverse proxy, PostgreSQL |
+| **Database** | SQLite (local dev) / PostgreSQL 16 ×2 (chat DB + order DB, Docker & CI) |
+| **Infrastructure** | Docker Compose — two Flask replicas, Order service, Nginx reverse proxy, two PostgreSQL instances |
 | **CI/CD** | GitHub Actions (Ubuntu-latest) |
 
 ---
@@ -69,20 +69,30 @@ The framework supports two database backends behind a shared interface:
 * **SQLite** (local dev / unit tests) — each test gets an isolated on-disk file with WAL mode and a busy-timeout to prevent lock contention.
 * **PostgreSQL 16** (Docker / CI) — each test wraps in a rolled-back transaction so no test data leaks between runs. The Docker stack runs two Flask replicas writing to the same Postgres instance; `test_db_integrity.py` verifies that data committed by one node is immediately visible from the other, confirming cross-node consistency under concurrent load.
 
-### 4. Performance Guardrails (Load Testing)
+### 4. Cross-Service SQL Integrity Testing
+The framework validates data consistency across two independent services — the **Chat Service** (`qadb`, port 5000) and the **Order Processing Service** (`orderdb`, port 5002) — each with their own PostgreSQL instance.
+
+ contains five test categories:
+* **End-to-end workflow** — triggers a chat session, creates a linked order, then queries both databases to assert the  is present and consistent across service boundaries.
+* **Referential integrity** — verifies that every  written to the order DB exists in the chat service, catching orphaned records that would go undetected within a single service.
+* **Data consistency** — asserts business rules: positive amounts, correct default status, no NULL required fields, and  consistency between services.
+* **Persistence** — opens a second independent DB connection to confirm commits are visible across connections, not just within the same transaction.
+* **Negative cases** — confirms the order service rejects invalid payloads and does not write partial rows on failure.
+
+### 5. Performance Guardrails (Load Testing)
 Real-time AI communication cannot tolerate lag. The suite integrates **JMeter** directly into the deployment pipeline to:
 * Simulate concurrent user bursts (e.g., 5–10 users with zero ramp-up).
 * Monitor **Connect Latency** and **95th Percentile Response Times**.
 * Run reliably in headless CI via a cached JMeter 5.6.3 installation.
 
-### 5. Containerised Infrastructure
+### 6. Containerised Infrastructure
 The full stack is defined in `docker-compose.yml`:
 * **`flask-mock` × 2** — Two Flask replicas behind Nginx, accessible at `https://localhost:5000`. Used by Pytest and Playwright tests.
 * **`flask-ai`** — A separate Flask server at `https://localhost:5001` with a higher token limit, used exclusively by JMeter performance tests.
 * **`nginx`** — Reverse proxy with self-signed TLS certs generated at pipeline start.
 * **`db`** — PostgreSQL 16 with a health-check gate; all dependent services wait for it to be ready before starting.
 
-### 6. Pipeline Observability
+### 7. Pipeline Observability
 The CI pipeline is designed for fast feedback and test visibility:
 * Executes tests with immediate failure reporting to surface issues early.
 * Includes timeout controls to prevent stalled or long-running executions.
@@ -148,6 +158,7 @@ curl -vk https://localhost:5001/health
 
 ## 📈 Roadmap
 - [x] **Data Persistence:** SQL-backed result tracking with dual SQLite/PostgreSQL support and cross-node integrity verification.
+- [x] **Cross-Service Integrity:** Order processing microservice with dedicated PostgreSQL instance; SQL validation tests asserting data consistency across service boundaries.
 - [x] **Infrastructure-as-Code:** Full Docker Compose stack with two Flask replicas, Nginx, and PostgreSQL 16.
 - [ ] **JMeter CI reporting:** Add pass/fail threshold enforcement.
 - [ ] **Playwright visual regression:** Evaluate screenshot diffing for UI layout stability checks.

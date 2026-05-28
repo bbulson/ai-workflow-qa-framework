@@ -92,6 +92,12 @@ jobs:
           curl -sk https://localhost:5001/health && break
           sleep 3
         done
+        # Wait for order service
+        echo "Waiting for order service on :5002..."
+        for i in {1..20}; do
+          curl -s http://localhost:5002/health && break
+          sleep 3
+        done
 
     - name: Wait for Postgres
       run: |
@@ -100,10 +106,18 @@ jobs:
           sleep 3
         done
 
+    - name: Wait for Order DB
+      run: |
+        for i in {1..15}; do
+          docker compose exec -T orderdb pg_isready -U qauser -d orderdb && break
+          sleep 3
+        done
+
     - name: Verify servers
       run: |
         curl -vk https://localhost:5000/health
         curl -vk https://localhost:5001/health
+        curl -v http://localhost:5002/health
 
     # ─────────────────────────────────────────────────────────────────
     # PYTEST FUNCTIONAL TESTS
@@ -119,6 +133,20 @@ jobs:
           --html=reports/pytest-report.html \
           --self-contained-html \
           -s
+      continue-on-error: true
+
+    - name: Run cross-service integrity tests
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+        DATABASE_URL: postgresql://qauser:qapassword@localhost:5432/qadb
+        ORDER_DB_URL: postgresql://qauser:qapassword@localhost:5433/orderdb
+        CHAT_API_URL: https://localhost:5000
+        ORDER_API_URL: http://localhost:5002
+      run: |
+        pytest tests/test_cross_service_integrity.py \
+          -v -s -m e2e \
+          --html=reports/cross-service-report.html \
+          --self-contained-html
       continue-on-error: true
 
     # ─────────────────────────────────────────────────────────────────
@@ -290,6 +318,11 @@ jobs:
           <div class="card">
             <h2>Functional Tests (pytest)</h2>
             <a href="pytest-report.html">Open Pytest HTML Report</a>
+          </div>
+
+          <div class="card">
+            <h2>Cross-Service Integrity Tests</h2>
+            <a href="cross-service-report.html">Open Cross-Service SQL Integrity Report</a>
           </div>
 
           <div class="card">

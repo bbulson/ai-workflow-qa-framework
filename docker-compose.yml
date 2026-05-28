@@ -68,7 +68,25 @@ services:
       - flask-ai
     restart: always
 
-  # ── Postgres ────────────────────────────────────────────────────
+  # ── Order Processing Microservice ───────────────────────────────
+  # Independent service with its own database (orderdb).
+  # Receives order events linked to chat sessions via session_id.
+  # Cross-service SQL tests query both qadb and orderdb to assert
+  # data consistency across service boundaries.
+  order-service:
+    build:
+      context: .
+      dockerfile: order_service/Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - ORDER_DB_URL=postgresql://qauser:qapassword@orderdb:5432/orderdb
+    depends_on:
+      orderdb:
+        condition: service_healthy
+    restart: always
+
+  # ── Chat Service Postgres ────────────────────────────────────────
   db:
     image: postgres:16
     environment:
@@ -85,5 +103,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Order Service Postgres (separate DB instance) ────────────────
+  # Intentionally a distinct database from the chat service — this is
+  # what makes cross-service SQL validation meaningful.
+  orderdb:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: qauser
+      POSTGRES_PASSWORD: qapassword
+      POSTGRES_DB: orderdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - orderdb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qauser -d orderdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
+  orderdb_data:
