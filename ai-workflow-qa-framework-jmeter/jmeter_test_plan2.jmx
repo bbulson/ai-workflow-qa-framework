@@ -56,29 +56,6 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
         </HeaderManager>
         <hashTree/>
 
-        <!-- Warm-up request: absorbs cold TCP/TLS handshake + backend
-             cold-start cost so it doesn't get counted against Payload
-             Under Limit below. Its own row in the report will look
-             slow — that's expected and fine, ignore it. -->
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Warm-up (ignore this row)" enabled="true">
-          <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
-          <stringProp name="HTTPSampler.port">${__P(port,5001)}</stringProp>
-          <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
-          <stringProp name="HTTPSampler.path">/chat</stringProp>
-          <stringProp name="HTTPSampler.method">POST</stringProp>
-          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
-          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
-            <collectionProp name="Arguments.arguments">
-              <elementProp name="" elementType="HTTPArgument">
-                <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                <stringProp name="Argument.value">{"prompt":"warmup"}</stringProp>
-                <stringProp name="Argument.metadata">=</stringProp>
-              </elementProp>
-            </collectionProp>
-          </elementProp>
-        </HTTPSamplerProxy>
-        <hashTree/>
-
         <!-- Request 1: Under limit (4900 chars) — expect HTTP 200 -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Payload Under Limit - 4900 chars (expect 200)" enabled="true">
           <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
