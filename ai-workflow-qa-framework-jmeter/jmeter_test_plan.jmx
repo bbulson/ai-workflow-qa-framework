@@ -9,10 +9,8 @@ Thread Group 2: Payload boundary correctness (3 sequential requests - under/at/o
 Groups run in parallel. Review reports separately to keep baseline metrics clean.
 </stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
-      <!-- true = thread groups run one after another, not in parallel.
-           Payload Boundary Tests now runs first (below), against an
-           idle server, before the 10k load test starts. -->
-      <boolProp name="TestPlan.serialize_threadgroups">true</boolProp>
+      <!-- false = thread groups run in parallel -->
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
     </TestPlan>
     <hashTree>
 
@@ -26,6 +24,113 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
         </collectionProp>
       </Arguments>
       <hashTree/>
+
+      <!-- ═══════════════════════════════════════════════════════
+           THREAD GROUP 1: 10k Request Load Test
+           50 concurrent threads × 200 iterations = 10,000 requests.
+           Iteration-based (not duration) so the count is exact and
+           assertable. Error rate SLA: < 1%. Throughput SLA: > 200 rps.
+           ═══════════════════════════════════════════════════════ -->
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent AI Users - 10k Load Test" enabled="true">
+        <intProp name="ThreadGroup.num_threads">50</intProp>
+        <intProp name="ThreadGroup.ramp_time">10</intProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController">
+          <intProp name="LoopController.loops">200</intProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Prompt Dataset" enabled="true">
+          <stringProp name="filename">test_data/prompts.csv</stringProp>
+          <stringProp name="variableNames">prompt</stringProp>
+          <stringProp name="delimiter">,</stringProp>
+          <boolProp name="recycle">true</boolProp>
+          <boolProp name="stopThread">false</boolProp>
+          <stringProp name="shareMode">shareMode.all</stringProp>
+          <stringProp name="fileEncoding"></stringProp>
+          <boolProp name="ignoreFirstLine">false</boolProp>
+          <boolProp name="quotedData">false</boolProp>
+        </CSVDataSet>
+        <hashTree/>
+        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Content-Type</stringProp>
+              <stringProp name="Header.value">application/json</stringProp>
+            </elementProp>
+          </collectionProp>
+        </HeaderManager>
+        <hashTree/>
+        <!-- Think time removed for 10k throughput test — measuring raw capacity -->
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
+          <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
+          <stringProp name="HTTPSampler.port">${__P(port,5001)}</stringProp>
+          <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
+          <stringProp name="HTTPSampler.path">/chat</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{"prompt":"${prompt}"}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <!-- Assert response contains 'response' key -->
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Validate JSON Response" enabled="true">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="-340323263">response</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+            <intProp name="Assertion.test_type">2</intProp>
+            <stringProp name="Assertion.custom_message"></stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+          </ResponseAssertion>
+          <hashTree/>
+          <!-- SLA: p95 response time must be under 500ms -->
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="SLA: Response time under 500ms" enabled="true">
+            <longProp name="DurationAssertion.duration">500</longProp>
+          </DurationAssertion>
+          <hashTree/>
+        </hashTree>
+        <ResultCollector guiclass="SimpleDataWriter" testclass="ResultCollector" testname="Request Response Trace" enabled="true">
+          <boolProp name="ResultCollector.error_logging">false</boolProp>
+          <objProp>
+            <name>saveConfig</name>
+            <value class="SampleSaveConfiguration">
+              <time>true</time>
+              <latency>true</latency>
+              <timestamp>true</timestamp>
+              <success>true</success>
+              <label>true</label>
+              <code>true</code>
+              <message>true</message>
+              <threadName>true</threadName>
+              <dataType>true</dataType>
+              <encoding>false</encoding>
+              <assertions>false</assertions>
+              <subresults>false</subresults>
+              <responseData>false</responseData>
+              <samplerData>false</samplerData>
+              <xml>false</xml>
+              <fieldNames>false</fieldNames>
+              <responseHeaders>false</responseHeaders>
+              <requestHeaders>false</requestHeaders>
+              <responseDataOnError>false</responseDataOnError>
+              <saveAssertionResultsFailureMessage>false</saveAssertionResultsFailureMessage>
+              <assertionsResultsToSave>0</assertionsResultsToSave>
+            </value>
+          </objProp>
+          <stringProp name="filename">request_response_trace.jtl</stringProp>
+        </ResultCollector>
+        <hashTree/>
+      </hashTree>
 
       <!-- ═══════════════════════════════════════════════════════
            THREAD GROUP 2: Payload Boundary Tests
@@ -182,113 +287,6 @@ Groups run in parallel. Review reports separately to keep baseline metrics clean
             </value>
           </objProp>
           <stringProp name="filename">payload_boundary_trace.jtl</stringProp>
-        </ResultCollector>
-        <hashTree/>
-      </hashTree>
-
-      <!-- ═══════════════════════════════════════════════════════
-           THREAD GROUP 1: 10k Request Load Test
-           50 concurrent threads × 200 iterations = 10,000 requests.
-           Iteration-based (not duration) so the count is exact and
-           assertable. Error rate SLA: < 1%. Throughput SLA: > 200 rps.
-           ═══════════════════════════════════════════════════════ -->
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent AI Users - 10k Load Test" enabled="true">
-        <intProp name="ThreadGroup.num_threads">50</intProp>
-        <intProp name="ThreadGroup.ramp_time">10</intProp>
-        <boolProp name="ThreadGroup.scheduler">false</boolProp>
-        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
-        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController">
-          <intProp name="LoopController.loops">200</intProp>
-          <boolProp name="LoopController.continue_forever">false</boolProp>
-        </elementProp>
-      </ThreadGroup>
-      <hashTree>
-        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Prompt Dataset" enabled="true">
-          <stringProp name="filename">test_data/prompts.csv</stringProp>
-          <stringProp name="variableNames">prompt</stringProp>
-          <stringProp name="delimiter">,</stringProp>
-          <boolProp name="recycle">true</boolProp>
-          <boolProp name="stopThread">false</boolProp>
-          <stringProp name="shareMode">shareMode.all</stringProp>
-          <stringProp name="fileEncoding"></stringProp>
-          <boolProp name="ignoreFirstLine">false</boolProp>
-          <boolProp name="quotedData">false</boolProp>
-        </CSVDataSet>
-        <hashTree/>
-        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
-          <collectionProp name="HeaderManager.headers">
-            <elementProp name="" elementType="Header">
-              <stringProp name="Header.name">Content-Type</stringProp>
-              <stringProp name="Header.value">application/json</stringProp>
-            </elementProp>
-          </collectionProp>
-        </HeaderManager>
-        <hashTree/>
-        <!-- Think time removed for 10k throughput test — measuring raw capacity -->
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Chat Prompt" enabled="true">
-          <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
-          <stringProp name="HTTPSampler.port">${__P(port,5001)}</stringProp>
-          <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
-          <stringProp name="HTTPSampler.path">/chat</stringProp>
-          <stringProp name="HTTPSampler.method">POST</stringProp>
-          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
-          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
-            <collectionProp name="Arguments.arguments">
-              <elementProp name="" elementType="HTTPArgument">
-                <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                <stringProp name="Argument.value">{"prompt":"${prompt}"}</stringProp>
-                <stringProp name="Argument.metadata">=</stringProp>
-              </elementProp>
-            </collectionProp>
-          </elementProp>
-        </HTTPSamplerProxy>
-        <hashTree>
-          <!-- Assert response contains 'response' key -->
-          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Validate JSON Response" enabled="true">
-            <collectionProp name="Asserion.test_strings">
-              <stringProp name="-340323263">response</stringProp>
-            </collectionProp>
-            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
-            <intProp name="Assertion.test_type">2</intProp>
-            <stringProp name="Assertion.custom_message"></stringProp>
-            <boolProp name="Assertion.assume_success">false</boolProp>
-          </ResponseAssertion>
-          <hashTree/>
-          <!-- SLA: p95 response time must be under 500ms -->
-          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="SLA: Response time under 500ms" enabled="true">
-            <longProp name="DurationAssertion.duration">500</longProp>
-          </DurationAssertion>
-          <hashTree/>
-        </hashTree>
-        <ResultCollector guiclass="SimpleDataWriter" testclass="ResultCollector" testname="Request Response Trace" enabled="true">
-          <boolProp name="ResultCollector.error_logging">false</boolProp>
-          <objProp>
-            <name>saveConfig</name>
-            <value class="SampleSaveConfiguration">
-              <time>true</time>
-              <latency>true</latency>
-              <timestamp>true</timestamp>
-              <success>true</success>
-              <label>true</label>
-              <code>true</code>
-              <message>true</message>
-              <threadName>true</threadName>
-              <dataType>true</dataType>
-              <encoding>false</encoding>
-              <assertions>false</assertions>
-              <subresults>false</subresults>
-              <responseData>false</responseData>
-              <samplerData>false</samplerData>
-              <xml>false</xml>
-              <fieldNames>false</fieldNames>
-              <responseHeaders>false</responseHeaders>
-              <requestHeaders>false</requestHeaders>
-              <responseDataOnError>false</responseDataOnError>
-              <saveAssertionResultsFailureMessage>false</saveAssertionResultsFailureMessage>
-              <assertionsResultsToSave>0</assertionsResultsToSave>
-            </value>
-          </objProp>
-          <stringProp name="filename">request_response_trace.jtl</stringProp>
         </ResultCollector>
         <hashTree/>
       </hashTree>
